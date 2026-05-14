@@ -17,71 +17,96 @@ export interface ParseOptions {
   readonly allowEmptyRoot?: boolean;
 }
 
-class Cursor {
-  index = 0;
-  constructor(public readonly source: string) {}
+interface Cursor {
+  readonly source: string;
+  index: number;
+}
 
-  eof(): boolean {
-    return this.index >= this.source.length;
+function makeCursor(source: string): Cursor {
+  return { source, index: 0 };
+}
+
+function cursorEof(c: Cursor): boolean {
+  return c.index >= c.source.length;
+}
+
+function cursorPeek(c: Cursor, offset = 0): string {
+  return c.source[c.index + offset] ?? "";
+}
+
+function cursorStartsWith(c: Cursor, value: string): boolean {
+  return c.source.startsWith(value, c.index);
+}
+
+function cursorAdvance(c: Cursor, n = 1): void {
+  c.index += n;
+}
+
+/** Consume characters up to (but not including) the literal `terminator`. */
+function cursorTakeUntil(c: Cursor, terminator: string): string {
+  const idx = c.source.indexOf(terminator, c.index);
+  if (idx < 0) {
+    throw xmlParseError(`Expected ${JSON.stringify(terminator)} but reached end of input`, c);
   }
+  const value = c.source.slice(c.index, idx);
+  c.index = idx;
+  return value;
+}
 
-  peek(offset = 0): string {
-    return this.source[this.index + offset] ?? "";
+/** Consume the literal `expected` or throw. */
+function cursorExpect(c: Cursor, expected: string): void {
+  if (!cursorStartsWith(c, expected)) {
+    throw xmlParseError(`Expected ${JSON.stringify(expected)}`, c);
   }
+  c.index += expected.length;
+}
 
-  startsWith(value: string): boolean {
-    return this.source.startsWith(value, this.index);
-  }
-
-  advance(n = 1): void {
-    this.index += n;
-  }
-
-  /** Consume characters up to (but not including) the literal `terminator`. */
-  takeUntil(terminator: string): string {
-    const idx = this.source.indexOf(terminator, this.index);
-    if (idx < 0) {
-      throw new XmlParseError(
-        `Expected ${JSON.stringify(terminator)} but reached end of input`,
-        this,
-      );
-    }
-    const value = this.source.slice(this.index, idx);
-    this.index = idx;
-    return value;
-  }
-
-  /** Consume the literal `expected` or throw. */
-  expect(expected: string): void {
-    if (!this.startsWith(expected)) {
-      throw new XmlParseError(`Expected ${JSON.stringify(expected)}`, this);
-    }
-    this.index += expected.length;
-  }
-
-  /** Skip XML whitespace (space, tab, newline, carriage return). */
-  skipWhitespace(): void {
-    while (this.index < this.source.length) {
-      const c = this.source[this.index];
-      if (c === " " || c === "\t" || c === "\n" || c === "\r") {
-        this.index++;
-      } else {
-        return;
-      }
+/** Skip XML whitespace (space, tab, newline, carriage return). */
+function cursorSkipWhitespace(c: Cursor): void {
+  while (c.index < c.source.length) {
+    const ch = c.source[c.index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      c.index++;
+    } else {
+      return;
     }
   }
 }
 
-export class XmlParseError extends Error {
+/**
+ * Tagged `Error` subtype thrown by {@link parseXml}. Carries the source
+ * offset of the failure. Identity check uses `err.name === "XmlParseError"`
+ * — we ship a `XmlParseError.is(err)` helper that also narrows the type.
+ */
+export interface XmlParseError extends Error {
+  readonly name: "XmlParseError";
   readonly position: number;
-  constructor(message: string, cursor: Cursor) {
-    super(`${message} at offset ${cursor.index}`);
-    this.position = cursor.index;
-  }
 }
 
-const NAME_START_CHARS = /[:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿豈-﷏ﷰ-�]/;
-const NAME_CHARS = /[-:A-Z_a-z0-9.·À-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍‿-⁀⁰-↏Ⰰ-⿯、-퟿豈-﷏ﷰ-�]/;
+function xmlParseError(message: string, cursor: Cursor): XmlParseError {
+  const err = new Error(`${message} at offset ${cursor.index}`) as XmlParseError & {
+    name: string;
+    position: number;
+  };
+  err.name = "XmlParseError";
+  err.position = cursor.index;
+  return err as XmlParseError;
+}
+
+/**
+ * Sentinel namespace for the `XmlParseError` type. Use `XmlParseError.is(e)`
+ * instead of `e instanceof XmlParseError` (the latter is no longer
+ * available because we don't subclass `Error` — that would prevent
+ * tree-shaking the error type in callers that don't care about it).
+ */
+export const XmlParseError = {
+  is(err: unknown): err is XmlParseError {
+    return err instanceof Error && err.name === "XmlParseError";
+  },
+};
+
+const NAME_START_CHARS = /[:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿豈-﷏ﷰ-�]/;
+const NAME_CHARS = /[-:A-Z_a-z0-9.·À-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍‿-⁀⁰-↏Ⰰ-⿯、-퟿豈-﷏ﷰ-�]/;
 
 function isNameStart(c: string): boolean {
   return NAME_START_CHARS.test(c);
@@ -92,12 +117,12 @@ function isNameChar(c: string): boolean {
 
 function readName(c: Cursor): string {
   const start = c.index;
-  const first = c.peek();
+  const first = cursorPeek(c);
   if (!isNameStart(first)) {
-    throw new XmlParseError(`Expected name start character, got ${JSON.stringify(first)}`, c);
+    throw xmlParseError(`Expected name start character, got ${JSON.stringify(first)}`, c);
   }
-  c.advance();
-  while (!c.eof() && isNameChar(c.peek())) c.advance();
+  cursorAdvance(c);
+  while (!cursorEof(c) && isNameChar(cursorPeek(c))) cursorAdvance(c);
   return c.source.slice(start, c.index);
 }
 
@@ -109,16 +134,16 @@ interface RawAttr {
 
 function readAttr(c: Cursor): RawAttr {
   const rawName = readName(c);
-  c.skipWhitespace();
-  c.expect("=");
-  c.skipWhitespace();
-  const quote = c.peek();
+  cursorSkipWhitespace(c);
+  cursorExpect(c, "=");
+  cursorSkipWhitespace(c);
+  const quote = cursorPeek(c);
   if (quote !== '"' && quote !== "'") {
-    throw new XmlParseError(`Expected attribute quote, got ${JSON.stringify(quote)}`, c);
+    throw xmlParseError(`Expected attribute quote, got ${JSON.stringify(quote)}`, c);
   }
-  c.advance();
-  const raw = c.takeUntil(quote);
-  c.advance();
+  cursorAdvance(c);
+  const raw = cursorTakeUntil(c, quote);
+  cursorAdvance(c);
   return { rawName, value: decodeEntities(raw), quote };
 }
 
@@ -145,11 +170,9 @@ function resolveQName(raw: string, scope: NamespaceScope, isAttr: boolean, c: Cu
   const colon = raw.indexOf(":");
   if (colon < 0) {
     if (raw === "xmlns") {
-      // unqualified xmlns is a namespace decl with synthetic uri
       return { uri: "http://www.w3.org/2000/xmlns/", local: "xmlns", prefix: "" };
     }
     if (isAttr) {
-      // Unprefixed attributes have no namespace per XML Namespaces 1.0 §6.2.
       return { uri: "", local: raw, prefix: "" };
     }
     const def = scope.map.get("") ?? "";
@@ -165,7 +188,7 @@ function resolveQName(raw: string, scope: NamespaceScope, isAttr: boolean, c: Cu
   }
   const uri = scope.map.get(prefix);
   if (uri === undefined) {
-    throw new XmlParseError(`Unbound namespace prefix: ${prefix}`, c);
+    throw xmlParseError(`Unbound namespace prefix: ${prefix}`, c);
   }
   return { uri, local, prefix };
 }
@@ -183,15 +206,15 @@ function buildAttrs(
 }
 
 function parseDeclaration(c: Cursor): XmlDeclaration | undefined {
-  if (!c.startsWith("<?xml")) return undefined;
-  c.advance("<?xml".length);
+  if (!cursorStartsWith(c, "<?xml")) return undefined;
+  cursorAdvance(c, "<?xml".length);
   const attrs: RawAttr[] = [];
-  c.skipWhitespace();
-  while (!c.startsWith("?>")) {
+  cursorSkipWhitespace(c);
+  while (!cursorStartsWith(c, "?>")) {
     attrs.push(readAttr(c));
-    c.skipWhitespace();
+    cursorSkipWhitespace(c);
   }
-  c.expect("?>");
+  cursorExpect(c, "?>");
 
   let version = "1.0";
   let encoding: string | undefined;
@@ -211,31 +234,32 @@ function parseDeclaration(c: Cursor): XmlDeclaration | undefined {
 }
 
 function parseComment(c: Cursor): XmlComment {
-  c.expect("<!--");
-  const value = c.takeUntil("-->");
-  c.expect("-->");
+  cursorExpect(c, "<!--");
+  const value = cursorTakeUntil(c, "-->");
+  cursorExpect(c, "-->");
   return { kind: "comment", value };
 }
 
 function parsePI(c: Cursor): XmlPI {
-  c.expect("<?");
+  cursorExpect(c, "<?");
   const target = readName(c);
   if (target.toLowerCase() === "xml") {
-    throw new XmlParseError("Processing instruction target may not be 'xml'", c);
+    throw xmlParseError("Processing instruction target may not be 'xml'", c);
   }
   let data = "";
-  if (c.peek() === " " || c.peek() === "\t" || c.peek() === "\n" || c.peek() === "\r") {
-    c.skipWhitespace();
-    data = c.takeUntil("?>");
+  const p = cursorPeek(c);
+  if (p === " " || p === "\t" || p === "\n" || p === "\r") {
+    cursorSkipWhitespace(c);
+    data = cursorTakeUntil(c, "?>");
   }
-  c.expect("?>");
+  cursorExpect(c, "?>");
   return { kind: "pi", target, data };
 }
 
 function parseCData(c: Cursor): XmlCData {
-  c.expect("<![CDATA[");
-  const value = c.takeUntil("]]>");
-  c.expect("]]>");
+  cursorExpect(c, "<![CDATA[");
+  const value = cursorTakeUntil(c, "]]>");
+  cursorExpect(c, "]]>");
   return { kind: "cdata", value };
 }
 
@@ -244,19 +268,18 @@ function parseElement(
   parentScope: NamespaceScope,
   parentSpace: "default" | "preserve",
 ): XmlElement {
-  c.expect("<");
+  cursorExpect(c, "<");
   const rawName = readName(c);
   const rawAttrs: RawAttr[] = [];
-  c.skipWhitespace();
-  while (!c.startsWith("/>") && !c.startsWith(">")) {
+  cursorSkipWhitespace(c);
+  while (!cursorStartsWith(c, "/>") && !cursorStartsWith(c, ">")) {
     rawAttrs.push(readAttr(c));
-    c.skipWhitespace();
+    cursorSkipWhitespace(c);
   }
   const scope = pushNamespaceScope(parentScope, rawAttrs);
   const name = resolveQName(rawName, scope, false, c);
   const attrs = buildAttrs(rawAttrs, scope, c);
 
-  // Determine effective xml:space for this element's content.
   let xmlSpace: "default" | "preserve" = parentSpace;
   for (const a of attrs) {
     if (a.name.uri === XML_NAMESPACE && a.name.local === "space") {
@@ -264,33 +287,32 @@ function parseElement(
     }
   }
 
-  if (c.startsWith("/>")) {
-    c.advance(2);
+  if (cursorStartsWith(c, "/>")) {
+    cursorAdvance(c, 2);
     return { kind: "element", name, attrs, children: [], xmlSpace, selfClosing: true };
   }
-  c.expect(">");
+  cursorExpect(c, ">");
 
   const children: XmlNode[] = [];
-  while (!c.eof()) {
-    if (c.startsWith("</")) break;
-    if (c.startsWith("<![CDATA[")) {
+  while (!cursorEof(c)) {
+    if (cursorStartsWith(c, "</")) break;
+    if (cursorStartsWith(c, "<![CDATA[")) {
       children.push(parseCData(c));
       continue;
     }
-    if (c.startsWith("<!--")) {
+    if (cursorStartsWith(c, "<!--")) {
       children.push(parseComment(c));
       continue;
     }
-    if (c.startsWith("<?")) {
+    if (cursorStartsWith(c, "<?")) {
       children.push(parsePI(c));
       continue;
     }
-    if (c.peek() === "<") {
+    if (cursorPeek(c) === "<") {
       children.push(parseElement(c, scope, xmlSpace));
       continue;
     }
-    // Text content up to the next `<`.
-    const rawText = c.takeUntil("<");
+    const rawText = cursorTakeUntil(c, "<");
     if (rawText.length === 0) continue;
     const value = decodeEntities(rawText);
     if (xmlSpace === "preserve" || value.trim().length > 0 || hasNonElementSiblings(children)) {
@@ -298,13 +320,13 @@ function parseElement(
     }
   }
 
-  c.expect("</");
+  cursorExpect(c, "</");
   const closeName = readName(c);
   if (closeName !== rawName) {
-    throw new XmlParseError(`Mismatched close tag: expected </${rawName}>, got </${closeName}>`, c);
+    throw xmlParseError(`Mismatched close tag: expected </${rawName}>, got </${closeName}>`, c);
   }
-  c.skipWhitespace();
-  c.expect(">");
+  cursorSkipWhitespace(c);
+  cursorExpect(c, ">");
 
   return { kind: "element", name, attrs, children, xmlSpace, selfClosing: false };
 }
@@ -319,47 +341,47 @@ function hasNonElementSiblings(children: readonly XmlNode[]): boolean {
  * comments, and processing instructions.
  */
 export function parseXml(source: string, _options: ParseOptions = {}): XmlDocument {
-  const cursor = new Cursor(source);
-  cursor.skipWhitespace();
+  const cursor = makeCursor(source);
+  cursorSkipWhitespace(cursor);
   const declaration = parseDeclaration(cursor);
-  cursor.skipWhitespace();
+  cursorSkipWhitespace(cursor);
 
   const prologue: XmlNode[] = [];
-  while (!cursor.eof() && !isElementStart(cursor)) {
-    if (cursor.startsWith("<!--")) {
+  while (!cursorEof(cursor) && !isElementStart(cursor)) {
+    if (cursorStartsWith(cursor, "<!--")) {
       prologue.push(parseComment(cursor));
-    } else if (cursor.startsWith("<?")) {
+    } else if (cursorStartsWith(cursor, "<?")) {
       prologue.push(parsePI(cursor));
-    } else if (cursor.startsWith("<!")) {
+    } else if (cursorStartsWith(cursor, "<!")) {
       // DOCTYPE not supported in OOXML; skip the declaration safely.
-      cursor.takeUntil(">");
-      cursor.expect(">");
-    } else if (cursor.peek() === "<") {
+      cursorTakeUntil(cursor, ">");
+      cursorExpect(cursor, ">");
+    } else if (cursorPeek(cursor) === "<") {
       break;
     } else {
-      cursor.advance();
+      cursorAdvance(cursor);
     }
-    cursor.skipWhitespace();
+    cursorSkipWhitespace(cursor);
   }
 
-  if (cursor.eof()) {
-    throw new XmlParseError("Document is missing a root element", cursor);
+  if (cursorEof(cursor)) {
+    throw xmlParseError("Document is missing a root element", cursor);
   }
 
   const rootScope: NamespaceScope = { map: new Map() };
   const root = parseElement(cursor, rootScope, "default");
-  cursor.skipWhitespace();
+  cursorSkipWhitespace(cursor);
 
   const epilogue: XmlNode[] = [];
-  while (!cursor.eof()) {
-    if (cursor.startsWith("<!--")) {
+  while (!cursorEof(cursor)) {
+    if (cursorStartsWith(cursor, "<!--")) {
       epilogue.push(parseComment(cursor));
-    } else if (cursor.startsWith("<?")) {
+    } else if (cursorStartsWith(cursor, "<?")) {
       epilogue.push(parsePI(cursor));
     } else {
-      cursor.advance();
+      cursorAdvance(cursor);
     }
-    cursor.skipWhitespace();
+    cursorSkipWhitespace(cursor);
   }
 
   return {
@@ -371,7 +393,7 @@ export function parseXml(source: string, _options: ParseOptions = {}): XmlDocume
 }
 
 function isElementStart(c: Cursor): boolean {
-  if (c.peek() !== "<") return false;
-  const next = c.peek(1);
+  if (cursorPeek(c) !== "<") return false;
+  const next = cursorPeek(c, 1);
   return next !== "!" && next !== "?" && next !== "/";
 }

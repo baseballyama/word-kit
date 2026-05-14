@@ -82,7 +82,13 @@ describe("parseXml", () => {
   });
 
   it("rejects mismatched close tags", () => {
-    expect(() => parseXml("<a><b></a></b>")).toThrow(XmlParseError);
+    let thrown: unknown;
+    try {
+      parseXml("<a><b></a></b>");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(XmlParseError.is(thrown)).toBe(true);
   });
 
   it("rejects unbound prefixes", () => {

@@ -53,6 +53,14 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Tree-shake budget
+        # Verifies @word-kit/core can be tree-shaken: a minimal entry
+        # (createDocx + appendParagraph + toUint8Array) stays under a hard
+        # bundle-size budget AND doesn't carry strings from feature areas it
+        # doesn't import. Regressions like reintroducing a class would make
+        # this job fail loudly instead of silently bloating bundles.
+        run: pnpm check:tree-shake
+
   # Multi-version test matrix. Adapt the matrix to the runtimes the project
   # supports. Drop versions that are past their EOL date.
   test:

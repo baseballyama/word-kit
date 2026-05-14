@@ -74,6 +74,7 @@ import {
   type WmlBlock,
   type WmlCommentsPart,
   type WmlDocument,
+  type WmlInline,
   type WmlNumberingPart,
   type WmlParagraph,
   type WmlRun,
@@ -205,6 +206,93 @@ export class Docx {
   /** Same shape as {@link headers} but for footer parts. */
   get footers(): Array<{ partName: string; relId: string; text: string }> {
     return this.collectHeaderFooterParts(WML_RELATIONSHIPS.footer);
+  }
+
+  /**
+   * Enumerate every named bookmark in the body. Each entry includes the
+   * bookmark name, its numeric id, and the paragraph that contains the
+   * `<w:bookmarkStart>`.
+   */
+  get bookmarks(): Array<{ name: string; id: number; paragraph: WmlParagraph }> {
+    const out: Array<{ name: string; id: number; paragraph: WmlParagraph }> = [];
+    for (const block of this.docModel.body.blocks) {
+      if (block.kind !== "paragraph") continue;
+      for (const child of block.children) {
+        if (child.kind !== "raw") continue;
+        if (child.node.name.uri !== WML_NS) continue;
+        if (child.node.name.local !== "bookmarkStart") continue;
+        const idAttr = child.node.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id");
+        const nameAttr = child.node.attrs.find(
+          (a) => a.name.uri === WML_NS && a.name.local === "name",
+        );
+        if (!idAttr || !nameAttr) continue;
+        const id = Number.parseInt(idAttr.value, 10);
+        if (!Number.isFinite(id)) continue;
+        out.push({ id, name: nameAttr.value, paragraph: block });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Remove a bookmark by name. Strips both the `<w:bookmarkStart>` and
+   * `<w:bookmarkEnd>` markers (matched by the start's id). Returns true if
+   * a bookmark with that name was found and removed.
+   */
+  removeBookmark(name: string): boolean {
+    let removedId: number | undefined;
+    const checkRemoveStart = (children: WmlInline[]): WmlInline[] => {
+      return children.filter((child) => {
+        if (
+          child.kind === "raw" &&
+          child.node.name.uri === WML_NS &&
+          child.node.name.local === "bookmarkStart"
+        ) {
+          const nameAttr = child.node.attrs.find(
+            (a) => a.name.uri === WML_NS && a.name.local === "name",
+          );
+          if (nameAttr?.value === name) {
+            const idAttr = child.node.attrs.find(
+              (a) => a.name.uri === WML_NS && a.name.local === "id",
+            );
+            if (idAttr) {
+              const n = Number.parseInt(idAttr.value, 10);
+              if (Number.isFinite(n)) removedId = n;
+            }
+            return false;
+          }
+        }
+        return true;
+      });
+    };
+    const checkRemoveEnd = (children: WmlInline[]): WmlInline[] => {
+      if (removedId === undefined) return children;
+      const targetId = String(removedId);
+      return children.filter((child) => {
+        if (
+          child.kind === "raw" &&
+          child.node.name.uri === WML_NS &&
+          child.node.name.local === "bookmarkEnd"
+        ) {
+          const idAttr = child.node.attrs.find(
+            (a) => a.name.uri === WML_NS && a.name.local === "id",
+          );
+          return idAttr?.value !== targetId;
+        }
+        return true;
+      });
+    };
+    for (const block of this.docModel.body.blocks) {
+      if (block.kind !== "paragraph") continue;
+      block.children = checkRemoveStart(block.children);
+    }
+    if (removedId === undefined) return false;
+    for (const block of this.docModel.body.blocks) {
+      if (block.kind !== "paragraph") continue;
+      block.children = checkRemoveEnd(block.children);
+    }
+    this.dirty = true;
+    return true;
   }
 
   /**

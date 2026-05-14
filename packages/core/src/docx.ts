@@ -1049,6 +1049,61 @@ export function removeAllImages(doc: Docx): number {
   return removed;
 }
 
+/**
+ * Strip every `<w:hyperlink>` element from the body, keeping the inner
+ * runs in place (so the linked text remains as plain text). External
+ * relationships (`http://...` targets) referenced by the dropped
+ * hyperlinks are also removed from `document.xml.rels`. Internal anchor
+ * hyperlinks have no rel, so only the wrapper is removed.
+ *
+ * Returns the number of `<w:hyperlink>` wrappers that were unwrapped.
+ */
+export function removeAllHyperlinks(doc: Docx): number {
+  const docRels = partRelationships(doc.opc, doc.partName);
+  const usedRelIds = new Set<string>();
+  let unwrapped = 0;
+
+  for (const block of doc.document.body.blocks) {
+    if (block.kind !== "paragraph") continue;
+    const out: typeof block.children = [];
+    for (const child of block.children) {
+      if (
+        child.kind === "raw" &&
+        child.node.name.uri === WML_NS &&
+        child.node.name.local === "hyperlink"
+      ) {
+        // Record the r:id (if any) so we can drop the matching relationship.
+        for (const a of child.node.attrs) {
+          if (a.name.local === "id" && a.name.prefix === "r") {
+            usedRelIds.add(a.value);
+          }
+        }
+        // Splice the wrapper's element children in as raw inlines. They are
+        // typically `<w:r>` runs but can also be tracked-change wrappers.
+        for (const inner of child.node.children) {
+          if (inner.kind === "element") {
+            out.push({ kind: "raw", node: inner });
+          }
+        }
+        unwrapped++;
+        continue;
+      }
+      out.push(child);
+    }
+    block.children = out;
+  }
+
+  // Drop hyperlink-type rels whose ids we just orphaned.
+  for (const rel of relationshipsByType(docRels, WML_RELATIONSHIPS.hyperlink)) {
+    if (usedRelIds.has(rel.id)) {
+      removeRelationship(docRels, rel.id);
+    }
+  }
+
+  if (unwrapped > 0) doc.dirty = true;
+  return unwrapped;
+}
+
 /** Remove every bookmark from the body. Returns the count removed. */
 export function removeAllBookmarks(doc: Docx): number {
   const names = bookmarks(doc).map((b) => b.name);

@@ -68,6 +68,14 @@ export {
   EMPTY_NUMBERING_XML,
   type NumberFormat,
 } from "./numbering-builders.js";
+export {
+  CORE_PROPERTIES_CONTENT_TYPE,
+  CORE_PROPERTIES_REL_TYPE,
+  type DocumentCoreProperties,
+  EMPTY_CORE_PROPERTIES_XML,
+  parseCoreProperties,
+  writeCoreProperties,
+} from "./core-properties.js";
 export { parseParagraph, parseWmlDocument } from "./parser.js";
 export {
   addSectPrFooterRef,

@@ -11,6 +11,12 @@ import {
   acceptAllRevisions,
   addSectPrFooterRef,
   addSectPrHeaderRef,
+  CORE_PROPERTIES_CONTENT_TYPE,
+  CORE_PROPERTIES_REL_TYPE,
+  type DocumentCoreProperties,
+  EMPTY_CORE_PROPERTIES_XML,
+  parseCoreProperties,
+  writeCoreProperties,
   buildAbstractNum,
   buildComment,
   buildCommentRangeEnd,
@@ -130,6 +136,7 @@ const NUMBERING_PART_NAME = "/word/numbering.xml";
 const COMMENTS_PART_NAME = "/word/comments.xml";
 const FOOTNOTES_PART_NAME = "/word/footnotes.xml";
 const ENDNOTES_PART_NAME = "/word/endnotes.xml";
+const CORE_PROPERTIES_PART_NAME = "/docProps/core.xml";
 
 const BULLET_ABSTRACT_NUM_ID = 9000;
 const DECIMAL_ABSTRACT_NUM_ID = 9001;
@@ -845,6 +852,42 @@ export class Docx {
     // starts from the current max we can see in pass-through drawing nodes
     // and from the relationships set length as a coarse upper bound.
     return Math.max(1, this.documentRelationships().all.length + 1);
+  }
+
+  /**
+   * Read the package's core document properties (title, creator, subject,
+   * etc.), parsed from `docProps/core.xml`. Returns an empty record if the
+   * part is absent.
+   */
+  get coreProperties(): DocumentCoreProperties {
+    const part = this.pkg.getPart(CORE_PROPERTIES_PART_NAME);
+    if (!part) return {};
+    const xml = new TextDecoder("utf-8").decode(part.data);
+    return parseCoreProperties(parseXml(xml));
+  }
+
+  /**
+   * Write the package's core document properties. Creates
+   * `docProps/core.xml` and the package-level relationship on first use.
+   * Subsequent calls merge into existing properties.
+   */
+  setCoreProperties(props: DocumentCoreProperties): void {
+    if (!this.pkg.hasPart(CORE_PROPERTIES_PART_NAME)) {
+      this.pkg.addPart({
+        name: CORE_PROPERTIES_PART_NAME,
+        contentType: CORE_PROPERTIES_CONTENT_TYPE,
+        data: new TextEncoder().encode(EMPTY_CORE_PROPERTIES_XML),
+      });
+      const pkgRels = this.pkg.packageRelationships;
+      if (pkgRels.byType(CORE_PROPERTIES_REL_TYPE).length === 0) {
+        pkgRels.add({ type: CORE_PROPERTIES_REL_TYPE, target: "docProps/core.xml" });
+      }
+    }
+    const existing = this.coreProperties;
+    const merged: DocumentCoreProperties = { ...existing, ...props };
+    const xml = serializeXml(writeCoreProperties(merged));
+    const part = this.pkg.getPart(CORE_PROPERTIES_PART_NAME);
+    if (part) part.data = new TextEncoder().encode(xml);
   }
 
   /** Parsed `word/footnotes.xml` AST, or `undefined` if absent. */

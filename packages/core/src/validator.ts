@@ -176,7 +176,118 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
     }
   }
 
+  // 4) Style references: every <w:pStyle w:val> and <w:rStyle w:val> in
+  // the document should resolve to a <w:style> in styles.xml. Word
+  // tolerates dangling references (falls back to Normal) so this is a
+  // warning, not an error.
+  const stylesPart = pkg.getPart("/word/styles.xml");
+  if (stylesPart) {
+    const knownStyleIds = collectStyleIds(stylesPart.data);
+    const referencedStyles = new Set<string>();
+    collectStyleRefs(docTree.root, referencedStyles);
+    for (const id of referencedStyles) {
+      if (!knownStyleIds.has(id)) {
+        issues.push({
+          level: "warning",
+          code: "style-ref-missing",
+          message: `<w:pStyle> / <w:rStyle> references "${id}" but no <w:style w:styleId="${id}"/> exists`,
+          partName: "/word/styles.xml",
+        });
+      }
+    }
+  }
+
+  // 5) Numbering references: every <w:numId w:val> should resolve to a
+  // <w:num> in numbering.xml.
+  const numberingPart = pkg.getPart("/word/numbering.xml");
+  const usedNumIds = collectNumIds(docTree.root);
+  if (usedNumIds.size > 0) {
+    if (!numberingPart) {
+      issues.push({
+        level: "error",
+        code: "numbering-part-missing",
+        message: "document.xml uses <w:numId> but /word/numbering.xml is missing",
+      });
+    } else {
+      const known = collectKnownNumIds(numberingPart.data);
+      for (const id of usedNumIds) {
+        if (!known.has(id)) {
+          issues.push({
+            level: "warning",
+            code: "num-id-missing",
+            message: `<w:numPr><w:numId w:val="${id}"/> has no matching <w:num> entry`,
+            partName: "/word/numbering.xml",
+          });
+        }
+      }
+    }
+  }
+
   return issues;
+}
+
+function collectStyleIds(bytes: Uint8Array): Set<string> {
+  const xml = new TextDecoder("utf-8").decode(bytes);
+  let tree: ReturnType<typeof parseXml>;
+  try {
+    tree = parseXml(xml);
+  } catch {
+    return new Set();
+  }
+  const out = new Set<string>();
+  for (const child of tree.root.children) {
+    if (child.kind !== "element") continue;
+    if (child.name.uri === WML_NS && child.name.local === "style") {
+      const id = child.attrs.find(
+        (a) => a.name.uri === WML_NS && a.name.local === "styleId",
+      )?.value;
+      if (id !== undefined) out.add(id);
+    }
+  }
+  return out;
+}
+
+function collectStyleRefs(root: XmlElement, out: Set<string>): void {
+  const visit = (el: XmlElement): void => {
+    if (el.name.uri === WML_NS && (el.name.local === "pStyle" || el.name.local === "rStyle")) {
+      const v = el.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "val")?.value;
+      if (v) out.add(v);
+    }
+    for (const c of el.children) if (c.kind === "element") visit(c);
+  };
+  visit(root);
+}
+
+function collectNumIds(root: XmlElement): Set<string> {
+  const out = new Set<string>();
+  const visit = (el: XmlElement): void => {
+    if (el.name.uri === WML_NS && el.name.local === "numId") {
+      const v = el.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "val")?.value;
+      if (v) out.add(v);
+    }
+    for (const c of el.children) if (c.kind === "element") visit(c);
+  };
+  visit(root);
+  return out;
+}
+
+function collectKnownNumIds(bytes: Uint8Array): Set<string> {
+  const xml = new TextDecoder("utf-8").decode(bytes);
+  let tree: ReturnType<typeof parseXml>;
+  try {
+    tree = parseXml(xml);
+  } catch {
+    return new Set();
+  }
+  const out = new Set<string>();
+  for (const child of tree.root.children) {
+    if (child.kind !== "element") continue;
+    if (child.name.uri === WML_NS && child.name.local === "num") {
+      const v = child.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "numId")?.value;
+      if (v) out.add(v);
+    }
+  }
+  return out;
 }
 
 function collectAttrIds(root: XmlElement, localName: string): Set<string> {

@@ -7,7 +7,7 @@ describe("Docx.validate", () => {
     expect(doc.validate()).toEqual([]);
   });
 
-  it("a kitchen-sink docx with comments and footnotes validates clean", () => {
+  it("a kitchen-sink docx with comments and footnotes has no error-level issues", () => {
     const doc = Docx.create({ paragraphs: ["body"] });
     const para = doc.paragraphs[0];
     if (!para) return;
@@ -16,7 +16,11 @@ describe("Docx.validate", () => {
     doc.addEndnote(para, "en");
     doc.addHeader("hdr");
     doc.addFooter("ftr");
-    expect(doc.validate()).toEqual([]);
+    // The minimal styles.xml seed doesn't include CommentReference /
+    // FootnoteReference, so we expect warnings about those style refs
+    // but no errors.
+    const issues = doc.validate();
+    expect(issues.filter((i) => i.level === "error")).toEqual([]);
   });
 
   it("flags missing media when the part is deleted manually", () => {

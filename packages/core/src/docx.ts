@@ -69,6 +69,7 @@ import {
   type WmlFootnotesPart,
   writeFootnotesPart,
   findStyle,
+  styleName,
   findText as wmlFindText,
   type HeaderFooterType,
   MINIMAL_STYLES_XML,
@@ -494,6 +495,25 @@ export function listStyles(doc: Docx): Array<{ styleId: string; type: string }> 
     out.push({ styleId: idAttr.value, type: typeAttr?.value ?? "" });
   }
   return out;
+}
+
+/**
+ * Resolve a style by its `<w:name w:val="…">` display name, returning the
+ * matching `styleId`. Useful when a template uses localised style names
+ * (e.g., Word in Japanese names "Heading 1" as "見出し 1" but its
+ * styleId stays "Heading1"). The match is case-sensitive on the display
+ * name. Returns `undefined` if no style has that name.
+ */
+export function findStyleIdByName(doc: Docx, name: string): string | undefined {
+  const part = stylesPart(doc);
+  if (!part) return undefined;
+  for (const style of part.styles) {
+    if (styleName(style) === name) {
+      const idAttr = style.attrs.find((a) => a.name.local === "styleId");
+      if (idAttr) return idAttr.value;
+    }
+  }
+  return undefined;
 }
 
 /**

@@ -53,14 +53,19 @@ this file is a hand-curated overview.
 - Lifecycle: `createDocx({ paragraphs? })`, `openDocx(bytes)`,
   `fromBlob(blob)`, `toUint8Array(doc)`, `toBlob(doc)`, `clone(doc)`.
 - Paragraphs: `appendParagraph`, `insertParagraphAt`, `removeParagraph`,
-  `appendHeading`, `appendPageBreak`, `appendSectionBreak`, `clearBody`.
+  `appendHeading`, `appendPageBreak`, `appendLineBreak`,
+  `appendSectionBreak`, `clearBody`.
 - Inline / text: `replaceText`, `replaceTextEverywhere`, `findText`,
   `findTextEverywhere`, `appendTextRun`, `setParagraphText`,
+  `paragraphText`, `setRunFormat`, `clearRunFormat`, `getRunFormat`,
   `setParagraphAlignment`, `setParagraphIndent`, `setParagraphSpacing`.
-- Styles + numbering: `addStyle`, `ensureHeadingStyles`, `addBulletList`,
-  `addNumberedList`, `applyListToParagraph`.
-- Tables: `addTable`, `tables`.
-- Images: `addImage`, `addImageRun`, `insertImageInto`, `images`, `replaceImage`.
+- Styles + numbering: `addStyle`, `removeStyle`, `listStyles`,
+  `ensureHeadingStyles`, `addBulletList`, `addNumberedList`,
+  `applyListToParagraph`.
+- Tables: `addTable`, `tables`, `removeTable`, `removeAllTables`,
+  `unwrapTable`.
+- Images: `addImage`, `addImageRun`, `insertImageInto`, `images`,
+  `replaceImage`, `removeAllImages`.
 - Headers / footers / sections: `addHeader`, `addFooter`,
   `addPageNumberFooter`, `setPageSize`, `setPageMargins`,
   `setPageOrientation`, `headers`, `footers`,
@@ -69,9 +74,10 @@ this file is a hand-curated overview.
   `addEndnote`, `removeAllComments`, `removeAllFootnotes`,
   `removeAllEndnotes`.
 - Hyperlinks + bookmarks: `addHyperlink`, `addInternalHyperlink`,
+  `externalHyperlinks`, `setHyperlinkUrl`, `removeAllHyperlinks`,
   `addBookmark`, `removeBookmark`, `removeAllBookmarks`, `bookmarks`.
-- Fields: `appendField`, `WORD_FIELDS`, plus the page-number footer
-  helper above.
+- Fields: `appendField`, `addTableOfContents`, `appendMergeField`,
+  `WORD_FIELDS`, plus the page-number footer helper above.
 - Tracked changes: `acceptAllRevisions`, `rejectAllRevisions`.
 - Core / app properties: `coreProperties`, `setCoreProperties`,
   `appProperties`, `setAppProperties`, `title`, `author`,
@@ -89,7 +95,7 @@ this file is a hand-curated overview.
   endnotes, tables, images, hyperlinks, text boxes, UTF-8 BOM, lists)
   and the python-docx test corpus. The ISO/IEC 29500 Strict variant is
   explicitly out of scope today and remains pass-through only.
-- 263 tests, all running in vitest under Node ≥ 20; the public surface
+- 311 tests, all running in vitest under Node ≥ 20; the public surface
   also runs in modern browsers (no Node-only dependencies in the published
   bundles).
 - CI gate runs typecheck, lint, format check, tests across Node 20/22/24,

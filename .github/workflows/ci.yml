@@ -64,7 +64,12 @@ jobs:
       matrix:
         node-version: ["20", "22", "24"]
     steps:
+      # references/* (mammoth.js, python-docx, …) are git submodules carrying
+      # real Word .docx fixtures used by the fixture-coverage and
+      # fixture-python-docx tests. Checkout must pull them.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4

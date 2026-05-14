@@ -7,7 +7,7 @@ browsers and Node.js.
 - Open an existing `.docx` as a template, edit it, and serialize it back.
 - Target: **full WordprocessingML coverage** of ECMA-376 Part 1.
 
-> Status: pre-1.0. Core functionality (`Docx.open` / `Docx.create` /
+> Status: pre-1.0. Core functionality (`openDocx` / `createDocx` /
 > `toUint8Array`) is stable; details may shift before v1.
 > See [`CLAUDE.md`](./CLAUDE.md) for engineering principles and scope rules
 > and [`PLAN.md`](./PLAN.md) for the milestone roadmap.
@@ -26,24 +26,39 @@ Node-only dependencies and works in browsers (including with the `Blob` and
 ## Quick start
 
 ```ts
-import { Docx, PAGE_SIZE_A4 } from "@word-kit/core";
+import {
+  addBulletList,
+  addTable,
+  appendParagraph,
+  createDocx,
+  openDocx,
+  PAGE_SIZE_A4,
+  replaceTextEverywhere,
+  setPageSize,
+  toUint8Array,
+} from "@word-kit/core";
 
 // From scratch
-const doc = Docx.create({ paragraphs: ["Hello, world."] });
-doc.appendParagraph("Bullets:");
-doc.addBulletList(["one", "two", "three"]);
-doc.addTable([
+const doc = createDocx({ paragraphs: ["Hello, world."] });
+appendParagraph(doc, "Bullets:");
+addBulletList(doc, ["one", "two", "three"]);
+addTable(doc, [
   ["Name", "Score"],
   ["Alice", "90"],
 ]);
-doc.setPageSize(PAGE_SIZE_A4);
-const bytes = await doc.toUint8Array();
+setPageSize(doc, PAGE_SIZE_A4);
+const bytes = toUint8Array(doc);
 
 // From an existing .docx template
-const tpl = Docx.open(existingDocxBytes);
-tpl.replaceTextEverywhere(/\{\{(\w+)\}\}/g, (m) => values[m.captures[0]!] ?? "");
-const out = await tpl.toUint8Array();
+const tpl = openDocx(existingDocxBytes);
+replaceTextEverywhere(tpl, /\{\{(\w+)\}\}/g, (m) => values[m.captures[0]!] ?? "");
+const out = toUint8Array(tpl);
 ```
+
+> **Why standalone functions instead of methods?** Each operation is its
+> own export, so a bundler can tree-shake any function you don't import.
+> A minimal `createDocx + appendParagraph + toUint8Array` slice bundles to
+> ~40 KB minified; the full surface is ~115 KB. CI enforces both numbers.
 
 See [`packages/core/README.md`](./packages/core/README.md) for the full API
 walkthrough (images, comments, footnotes, headers/footers, bookmarks,

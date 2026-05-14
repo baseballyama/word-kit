@@ -7,42 +7,77 @@ this file is a hand-curated overview.
 
 ## Unreleased
 
+### Changed
+
+- **No-classes API.** Every package now exposes plain data types and
+  standalone functions instead of classes. The motivation is
+  tree-shaking: classes carry every method along with the prototype,
+  so a bundler can't drop unused operations once an instance escapes.
+  - `Docx` is an `interface` (just `{ opc, document, partName, … }`).
+  - `Docx.create(…)` → `createDocx(…)`. `Docx.open(bytes)` → `openDocx(bytes)`.
+    `Docx.fromBlob(blob)` → `fromBlob(blob)`.
+  - `doc.appendParagraph(text)` → `appendParagraph(doc, text)`. Same
+    pattern for every previous method.
+  - Previous getters become functions: `doc.paragraphs` → `paragraphs(doc)`,
+    `doc.statistics` → `statistics(doc)`, etc.
+  - Previous setters become `setX` functions: `doc.title = x` →
+    `setTitle(doc, x)`. `doc.opc`, `doc.document`, `doc.partName` stay
+    as direct property access.
+  - `OpcPackage`, `ContentTypesIndex`, `RelationshipSet` are likewise
+    plain interfaces backed by standalone `addPart`, `getPart`,
+    `allRelationships`, `packageRelationships`, … functions.
+  - `XmlParseError` is no longer a class. Use `XmlParseError.is(e)` for
+    narrowing (in place of `e instanceof XmlParseError`).
+
+  A minimal `createDocx + appendParagraph + toUint8Array` slice bundles
+  to ~40 KB minified; the full surface is ~115 KB. CI enforces both the
+  byte budget and that no feature-specific string literals from unused
+  branches leak into the minimal bundle (see `scripts/check-tree-shake.mjs`).
+
 ### Added
 
 - `@word-kit/opc` — Open Packaging Conventions reader/writer with byte-stable
-  round-trip for untouched parts. Built on `fflate`.
+  round-trip for untouched parts. Built on `fflate`. Plain-data API
+  (`OpcPackage` interface + `readOpcPackage`, `writeOpcPackage`,
+  `addPart`, `getPart`, `allRelationships`, `packageRelationships`, …).
 - `@word-kit/ooxml-xml` — namespace-aware XML parser/serializer that preserves
   attribute order, prefixes, `xml:space="preserve"`, CDATA, comments, and PIs.
 - `@word-kit/wml` — WordprocessingML AST plus parsers, writers, and builders
   for paragraphs, runs, tables, styles, numbering, headers/footers, sections,
   comments, footnotes/endnotes, hyperlinks, fields, and document properties.
-- `@word-kit/core` — the public `Docx` class wrapping the lower packages.
+- `@word-kit/core` — the public `Docx` interface and standalone-function API
+  wrapping the lower packages.
 
-#### Authoring (`Docx`)
+#### Authoring (function API on `@word-kit/core`)
 
-- `Docx.create({ paragraphs? })`, `Docx.open(bytes)`, `Docx.fromBlob(blob)`,
-  `toUint8Array()`, `toBlob()`, `clone()`.
+- Lifecycle: `createDocx({ paragraphs? })`, `openDocx(bytes)`,
+  `fromBlob(blob)`, `toUint8Array(doc)`, `toBlob(doc)`, `clone(doc)`.
 - Paragraphs: `appendParagraph`, `insertParagraphAt`, `removeParagraph`,
   `appendHeading`, `appendPageBreak`, `appendSectionBreak`, `clearBody`.
 - Inline / text: `replaceText`, `replaceTextEverywhere`, `findText`,
   `findTextEverywhere`, `appendTextRun`, `setParagraphText`,
   `setParagraphAlignment`, `setParagraphIndent`, `setParagraphSpacing`.
 - Styles + numbering: `addStyle`, `ensureHeadingStyles`, `addBulletList`,
-  `addNumberedList`.
+  `addNumberedList`, `applyListToParagraph`.
 - Tables: `addTable`, `tables`.
-- Images: `addImage`, `addImageRun`, `images`, `replaceImage`.
+- Images: `addImage`, `addImageRun`, `insertImageInto`, `images`, `replaceImage`.
 - Headers / footers / sections: `addHeader`, `addFooter`,
   `addPageNumberFooter`, `setPageSize`, `setPageMargins`,
-  `setPageOrientation`, `headers`, `footers`.
+  `setPageOrientation`, `headers`, `footers`,
+  `removeAllHeaders`, `removeAllFooters`.
 - Comments / footnotes / endnotes: `addComment`, `addFootnote`,
-  `addEndnote`, `removeAllComments`.
+  `addEndnote`, `removeAllComments`, `removeAllFootnotes`,
+  `removeAllEndnotes`.
 - Hyperlinks + bookmarks: `addHyperlink`, `addInternalHyperlink`,
-  `addBookmark`, `removeBookmark`, `bookmarks`.
+  `addBookmark`, `removeBookmark`, `removeAllBookmarks`, `bookmarks`.
 - Fields: `appendField`, `WORD_FIELDS`, plus the page-number footer
   helper above.
 - Tracked changes: `acceptAllRevisions`, `rejectAllRevisions`.
-- Core properties: `coreProperties`, `setCoreProperties`, `title`, `author`.
-- Diagnostics: `validate()`, `statistics`, `outline()`, `fields` (enumeration).
+- Core / app properties: `coreProperties`, `setCoreProperties`,
+  `appProperties`, `setAppProperties`, `title`, `author`,
+  `setTitle`, `setAuthor`.
+- Diagnostics: `validate(doc)`, `statistics(doc)`, `outline(doc)`,
+  `fields(doc)`.
 
 ### Implementation notes
 
@@ -51,9 +86,11 @@ this file is a hand-curated overview.
   original child position, so re-saving an unmodified template leaves
   Word's "needs repair" prompt out of the picture.
 - Verified against the mammoth.js fixture corpus (comments, footnotes,
-  endnotes, tables, images, hyperlinks, text boxes, UTF-8 BOM, lists).
-  The ISO/IEC 29500 Strict variant is explicitly out of scope today and
-  remains pass-through only.
-- 200+ tests, all running in vitest under Node ≥ 20; the public surface
+  endnotes, tables, images, hyperlinks, text boxes, UTF-8 BOM, lists)
+  and the python-docx test corpus. The ISO/IEC 29500 Strict variant is
+  explicitly out of scope today and remains pass-through only.
+- 263 tests, all running in vitest under Node ≥ 20; the public surface
   also runs in modern browsers (no Node-only dependencies in the published
   bundles).
+- CI gate runs typecheck, lint, format check, tests across Node 20/22/24,
+  AND the tree-shake budget check.

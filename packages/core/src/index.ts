@@ -10,6 +10,14 @@ export {
   Docx,
   type DocxCreateOptions,
 } from "./docx.js";
+export {
+  type HeaderFooterType,
+  MARGINS_NORMAL,
+  PAGE_SIZE_A4,
+  PAGE_SIZE_LETTER,
+  type PageMargins,
+  type PageSize,
+} from "@word-kit/wml";
 // Re-export types that are part of the public surface area so consumers can
 // use them without importing from internal packages directly.
 export type {

@@ -47,6 +47,25 @@ export {
   type NumberFormat,
 } from "./numbering-builders.js";
 export { parseWmlDocument } from "./parser.js";
+export {
+  addSectPrFooterRef,
+  addSectPrHeaderRef,
+  buildFooterReference,
+  buildFooterXml,
+  buildHeaderReference,
+  buildHeaderXml,
+  buildPgMar,
+  buildPgSz,
+  buildSectPr,
+  type HeaderFooterType,
+  MARGINS_NORMAL,
+  PAGE_SIZE_A4,
+  PAGE_SIZE_LETTER,
+  type PageMargins,
+  type PageSize,
+  setSectPrPageMargins,
+  setSectPrPageSize,
+} from "./section-builders.js";
 export { type BuildStyleOptions, buildStyle, MINIMAL_STYLES_XML } from "./style-builders.js";
 export {
   findStyle,

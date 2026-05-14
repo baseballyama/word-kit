@@ -8,7 +8,11 @@ import {
   type RelationshipSet,
 } from "@word-kit/opc";
 import {
+  addSectPrFooterRef,
+  addSectPrHeaderRef,
   buildAbstractNum,
+  buildFooterXml,
+  buildHeaderXml,
   buildInlineDrawing,
   buildNum,
   buildPPrWithNumPr,
@@ -23,13 +27,19 @@ import {
   extensionForImageContentType,
   findStyle,
   findText,
+  type HeaderFooterType,
   MINIMAL_STYLES_XML,
   numAbstractRef,
   numId as readNumId,
+  type PageMargins,
+  PAGE_SIZE_LETTER,
+  type PageSize,
   parseNumberingPart,
   parseStylesPart,
   parseWmlDocument,
   replaceText,
+  setSectPrPageMargins,
+  setSectPrPageSize,
   sniffImageContentType,
   type TextMatch,
   WML_CONTENT_TYPES,
@@ -47,6 +57,7 @@ import {
   writeStylesPart,
   writeWmlDocument,
 } from "@word-kit/wml";
+import type { XmlElement } from "@word-kit/ooxml-xml";
 
 const DOCUMENT_PART_FALLBACK = "/word/document.xml";
 
@@ -540,6 +551,143 @@ export class Docx {
     // starts from the current max we can see in pass-through drawing nodes
     // and from the relationships set length as a coarse upper bound.
     return Math.max(1, this.documentRelationships().all.length + 1);
+  }
+
+  /**
+   * Add a header part with the given text and wire it to the body's
+   * trailing `<w:sectPr>`. Creates the sectPr if missing.
+   *
+   * Returns the relationship id assigned to the header part.
+   */
+  addHeader(text: string, type: HeaderFooterType = "default"): string {
+    const partName = this.allocateHeaderPartName();
+    const xml = buildHeaderXml(text);
+    this.pkg.addPart({
+      name: partName,
+      contentType: WML_CONTENT_TYPES.header,
+      data: new TextEncoder().encode(xml),
+    });
+    const docRels = this.pkg.partRelationships(this.partName);
+    const rel = docRels.add({
+      type: WML_RELATIONSHIPS.header,
+      target: this.targetRelativeToDoc(partName),
+    });
+    const sectPr = this.ensureBodySectPr();
+    addSectPrHeaderRef(sectPr, type, rel.id);
+    this.dirty = true;
+    return rel.id;
+  }
+
+  /** Like {@link addHeader} but for a footer. */
+  addFooter(text: string, type: HeaderFooterType = "default"): string {
+    const partName = this.allocateFooterPartName();
+    const xml = buildFooterXml(text);
+    this.pkg.addPart({
+      name: partName,
+      contentType: WML_CONTENT_TYPES.footer,
+      data: new TextEncoder().encode(xml),
+    });
+    const docRels = this.pkg.partRelationships(this.partName);
+    const rel = docRels.add({
+      type: WML_RELATIONSHIPS.footer,
+      target: this.targetRelativeToDoc(partName),
+    });
+    const sectPr = this.ensureBodySectPr();
+    addSectPrFooterRef(sectPr, type, rel.id);
+    this.dirty = true;
+    return rel.id;
+  }
+
+  /** Set the page size on the body's trailing `<w:sectPr>`. */
+  setPageSize(size: PageSize): void {
+    const sectPr = this.ensureBodySectPr();
+    setSectPrPageSize(sectPr, size);
+    this.dirty = true;
+  }
+
+  /** Set the page margins on the body's trailing `<w:sectPr>`. */
+  setPageMargins(margins: PageMargins): void {
+    const sectPr = this.ensureBodySectPr();
+    setSectPrPageMargins(sectPr, margins);
+    this.dirty = true;
+  }
+
+  /** Switch the page orientation (portrait/landscape) on the body sectPr. */
+  setPageOrientation(orientation: "portrait" | "landscape"): void {
+    const sectPr = this.ensureBodySectPr();
+    const pgSz = sectPr.children.find(
+      (c): c is XmlElement => c.kind === "element" && c.name.local === "pgSz",
+    );
+    if (pgSz) {
+      // Swap width/height when toggling orientation if needed.
+      const wAttr = pgSz.attrs.find((a) => a.name.local === "w");
+      const hAttr = pgSz.attrs.find((a) => a.name.local === "h");
+      const widthTwips = wAttr ? Number.parseInt(wAttr.value, 10) : PAGE_SIZE_LETTER.widthTwips;
+      const heightTwips = hAttr ? Number.parseInt(hAttr.value, 10) : PAGE_SIZE_LETTER.heightTwips;
+      // For landscape, width > height; for portrait, height > width.
+      const isLandscape = orientation === "landscape";
+      const newWidth = isLandscape
+        ? Math.max(widthTwips, heightTwips)
+        : Math.min(widthTwips, heightTwips);
+      const newHeight = isLandscape
+        ? Math.min(widthTwips, heightTwips)
+        : Math.max(widthTwips, heightTwips);
+      setSectPrPageSize(sectPr, { widthTwips: newWidth, heightTwips: newHeight, orientation });
+    } else {
+      setSectPrPageSize(sectPr, { ...PAGE_SIZE_LETTER, orientation });
+    }
+    this.dirty = true;
+  }
+
+  private ensureBodySectPr(): XmlElement {
+    if (this.docModel.body.sectPr) return this.docModel.body.sectPr;
+    const sectPr: XmlElement = {
+      kind: "element",
+      name: { uri: WML_NS, local: "sectPr", prefix: "w" },
+      attrs: [],
+      children: [
+        {
+          kind: "element",
+          name: { uri: WML_NS, local: "pgSz", prefix: "w" },
+          attrs: [
+            {
+              name: { uri: WML_NS, local: "w", prefix: "w" },
+              value: "12240",
+              isNamespaceDecl: false,
+            },
+            {
+              name: { uri: WML_NS, local: "h", prefix: "w" },
+              value: "15840",
+              isNamespaceDecl: false,
+            },
+          ],
+          children: [],
+          xmlSpace: "default",
+          selfClosing: true,
+        },
+      ],
+      xmlSpace: "default",
+      selfClosing: false,
+    };
+    this.docModel.body.sectPr = sectPr;
+    return sectPr;
+  }
+
+  private allocateHeaderPartName(): string {
+    let n = 1;
+    while (this.pkg.hasPart(`/word/header${n}.xml`)) n++;
+    return `/word/header${n}.xml`;
+  }
+
+  private allocateFooterPartName(): string {
+    let n = 1;
+    while (this.pkg.hasPart(`/word/footer${n}.xml`)) n++;
+    return `/word/footer${n}.xml`;
+  }
+
+  private targetRelativeToDoc(partName: string): string {
+    if (partName.startsWith("/word/")) return partName.slice("/word/".length);
+    return partName.startsWith("/") ? partName.slice(1) : partName;
   }
 
   /** Serialize the package back to `.docx` bytes. */

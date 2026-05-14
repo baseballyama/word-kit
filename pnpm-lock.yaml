@@ -44,6 +44,12 @@ importers:
         specifier: ^0.8.2
         version: 0.8.2
 
+  packages/wordprocessingml:
+    dependencies:
+      '@word-kit/ooxml-xml':
+        specifier: workspace:*
+        version: link:../ooxml-xml
+
 packages:
 
   '@babel/runtime@7.29.2':

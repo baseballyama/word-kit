@@ -1,0 +1,51 @@
+{
+  "name": "@word-kit/wml",
+  "version": "0.0.0",
+  "description": "WordprocessingML semantic AST (document, paragraph, run) for word-kit. Internal.",
+  "keywords": [
+    "docx",
+    "ecma-376",
+    "ooxml",
+    "wordprocessingml"
+  ],
+  "homepage": "https://github.com/baseballyama/word-kit#readme",
+  "bugs": {
+    "url": "https://github.com/baseballyama/word-kit/issues"
+  },
+  "license": "MIT",
+  "author": "Yuichiro Yamashita",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baseballyama/word-kit.git",
+    "directory": "packages/wordprocessingml"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@word-kit/ooxml-xml": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

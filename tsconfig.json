@@ -7,6 +7,7 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/opc" },
-    { "path": "./packages/ooxml-xml" }
+    { "path": "./packages/ooxml-xml" },
+    { "path": "./packages/wordprocessingml" }
   ]
 }

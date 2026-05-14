@@ -38,9 +38,12 @@ export {
   setParagraphText,
   setRunFormat,
   setTableBorders,
+  setTableCellShading,
   setTableCellText,
+  setTableRowAsHeader,
   type TableBorderStyle,
   type TableBordersOptions,
+  type TableCellShadingOptions,
 } from "./builders.js";
 export {
   buildInlineDrawing,

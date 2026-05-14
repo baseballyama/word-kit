@@ -33,9 +33,12 @@ export {
   setParagraphText,
   setRunFormat,
   setTableBorders,
+  setTableCellShading,
   setTableCellText,
+  setTableRowAsHeader,
   type TableBorderStyle,
   type TableBordersOptions,
+  type TableCellShadingOptions,
 } from "@word-kit/wml";
 // Re-export types that are part of the public surface area so consumers can
 // use them without importing from internal packages directly.

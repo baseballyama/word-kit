@@ -215,6 +215,93 @@ export function setTableBorders(table: WmlTable, options: TableBordersOptions = 
   if (!table.tblPr) table.tblPr = tblPr;
 }
 
+export interface TableCellShadingOptions {
+  /**
+   * Hex RGB fill colour without a leading `#` (e.g. `"DDDDDD"`). Defaults
+   * to `"auto"` which lets Word pick from the active style.
+   */
+  readonly fill?: string;
+  /**
+   * Pattern overlaid on the fill. `"clear"` (default) is a flat fill;
+   * `"solid"` is equivalent to `"clear"` with the foreground colour
+   * forced; the rest are crosshatches commonly used for table emphasis.
+   */
+  readonly pattern?:
+    | "clear"
+    | "solid"
+    | "horzStripe"
+    | "vertStripe"
+    | "diagStripe"
+    | "diagCross"
+    | "thinHorzStripe"
+    | "thinVertStripe";
+  /**
+   * Pattern stroke colour (only meaningful when `pattern !== "clear"`).
+   * Defaults to `"auto"`.
+   */
+  readonly color?: string;
+}
+
+/**
+ * Apply cell shading to a table cell. Replaces any existing `<w:shd>` on
+ * the cell's `<w:tcPr>`; other tcPr children (width, vertical alignment,
+ * cell margins) are preserved.
+ *
+ * Example — light grey header cell:
+ *   `setTableCellShading(headerCell, { fill: "E0E0E0" });`
+ */
+export function setTableCellShading(cell: WmlTableCell, options: TableCellShadingOptions): void {
+  const fill = options.fill ?? "auto";
+  const pattern = options.pattern ?? "clear";
+  const color = options.color ?? "auto";
+  const tcPr = cell.tcPr ?? {
+    kind: "element",
+    name: { uri: WML_NS, local: "tcPr", prefix: "w" },
+    attrs: [],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  const children = tcPr.children as XmlElement[];
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === "shd") {
+      children.splice(i, 1);
+    }
+  }
+  children.push(
+    wmlEmpty("shd", [wmlAttr("val", pattern), wmlAttr("color", color), wmlAttr("fill", fill)]),
+  );
+  if (!cell.tcPr) cell.tcPr = tcPr;
+}
+
+/**
+ * Mark a table row as a *header row* — its content is repeated at the
+ * top of every page when the table breaks across pages. Word's UI
+ * equivalent is "Repeat as header row at the top of each page".
+ *
+ * Pass `false` to clear the marker.
+ */
+export function setTableRowAsHeader(row: WmlTableRow, isHeader = true): void {
+  const trPr = row.trPr ?? {
+    kind: "element",
+    name: { uri: WML_NS, local: "trPr", prefix: "w" },
+    attrs: [],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  const children = trPr.children as XmlElement[];
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === "tblHeader") {
+      children.splice(i, 1);
+    }
+  }
+  if (isHeader) children.push(wmlEmpty("tblHeader", []));
+  if (!row.trPr) row.trPr = trPr;
+}
+
 export interface RunFormatting {
   readonly bold?: boolean;
   readonly italic?: boolean;

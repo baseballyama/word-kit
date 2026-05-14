@@ -32,9 +32,15 @@ importers:
 
   packages/core:
     dependencies:
+      '@word-kit/ooxml-xml':
+        specifier: workspace:*
+        version: link:../ooxml-xml
       '@word-kit/opc':
         specifier: workspace:*
         version: link:../opc
+      '@word-kit/wml':
+        specifier: workspace:*
+        version: link:../wordprocessingml
 
   packages/ooxml-xml: {}
 

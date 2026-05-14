@@ -44,7 +44,9 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@word-kit/opc": "workspace:*"
+    "@word-kit/ooxml-xml": "workspace:*",
+    "@word-kit/opc": "workspace:*",
+    "@word-kit/wml": "workspace:*"
   },
   "engines": {
     "node": ">=20"

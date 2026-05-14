@@ -97,9 +97,7 @@ describe("text-search: replaceText", () => {
   });
 
   it("preserves trailing text in the last touched run", () => {
-    const d = doc(
-      "<w:p>" + "<w:r><w:t>Hello {{na</w:t></w:r>" + "<w:r><w:t>me}} world</w:t></w:r>" + "</w:p>",
-    );
+    const d = doc("<w:p><w:r><w:t>Hello {{na</w:t></w:r><w:r><w:t>me}} world</w:t></w:r></w:p>");
     expect(replaceText(d, "{{name}}", "X")).toBe(1);
     expect(paragraphText(d.body.blocks[0] as never)).toBe("Hello X world");
   });

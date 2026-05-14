@@ -12,10 +12,12 @@ export {
 } from "./docx.js";
 export { type ValidationIssue, validatePackage } from "./validator.js";
 export {
+  appendTableRow,
   appendTextRun,
   getParagraphAlignment,
   getParagraphNumbering,
   getParagraphStyle,
+  getTableCellText,
   type HeaderFooterType,
   MARGINS_NORMAL,
   PAGE_SIZE_A4,
@@ -25,11 +27,13 @@ export {
   type ParagraphAlignment,
   type ParagraphIndent,
   type ParagraphSpacing,
+  removeTableRow,
   type RunFormatting,
   setParagraphAlignment,
   setParagraphIndent,
   setParagraphSpacing,
   setParagraphText,
+  setTableCellText,
 } from "@word-kit/wml";
 // Re-export types that are part of the public surface area so consumers can
 // use them without importing from internal packages directly.

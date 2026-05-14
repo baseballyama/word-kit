@@ -15,6 +15,7 @@ export {
   WML_RELATIONSHIPS,
 } from "./namespaces.js";
 export {
+  appendTableRow,
   appendTextRun,
   type BuildTableOptions,
   buildTextParagraph,
@@ -23,14 +24,17 @@ export {
   getParagraphAlignment,
   getParagraphNumbering,
   getParagraphStyle,
+  getTableCellText,
   type ParagraphAlignment,
   type ParagraphIndent,
   type ParagraphSpacing,
+  removeTableRow,
   type RunFormatting,
   setParagraphAlignment,
   setParagraphIndent,
   setParagraphSpacing,
   setParagraphText,
+  setTableCellText,
 } from "./builders.js";
 export {
   buildInlineDrawing,

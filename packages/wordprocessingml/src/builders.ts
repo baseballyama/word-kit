@@ -352,6 +352,98 @@ function refChildVal(parent: XmlElement | undefined, local: string): string | un
   return undefined;
 }
 
+/**
+ * Replace the text of a specific cell in a table with `text`. The cell's
+ * existing paragraphs are replaced with a single paragraph containing one
+ * styled text run. Row / column indices are 0-based; throws if out of
+ * range.
+ */
+export function setTableCellText(
+  table: WmlTable,
+  row: number,
+  col: number,
+  text: string,
+  formatting: RunFormatting = {},
+): void {
+  const tableRow = table.rows[row];
+  if (!tableRow) {
+    throw new Error(
+      `setTableCellText: row ${row} is out of range (table has ${table.rows.length})`,
+    );
+  }
+  const cell = tableRow.cells[col];
+  if (!cell) {
+    throw new Error(
+      `setTableCellText: column ${col} is out of range (row ${row} has ${tableRow.cells.length})`,
+    );
+  }
+  const paragraph = buildTextParagraph(text);
+  cell.paragraphs = [paragraph];
+  if (Object.keys(formatting).length > 0) {
+    // appendTextRun already pushed the plain run; we need to wrap with the
+    // styled run instead. Rebuild via appendTextRun on a fresh paragraph.
+    paragraph.children = [];
+    appendTextRun(paragraph, text, formatting);
+  }
+}
+
+/**
+ * Read the plain text of a single table cell (joining its paragraphs with
+ * newlines). Throws if `row` / `col` is out of range.
+ */
+export function getTableCellText(table: WmlTable, row: number, col: number): string {
+  const tableRow = table.rows[row];
+  if (!tableRow) {
+    throw new Error(`getTableCellText: row ${row} is out of range`);
+  }
+  const cell = tableRow.cells[col];
+  if (!cell) {
+    throw new Error(`getTableCellText: column ${col} is out of range`);
+  }
+  return cell.paragraphs
+    .map((p) => {
+      let acc = "";
+      for (const child of p.children) {
+        if (child.kind !== "run") continue;
+        for (const piece of child.pieces) {
+          if (piece.kind === "text" || piece.kind === "delText") acc += piece.value;
+        }
+      }
+      return acc;
+    })
+    .join("\n");
+}
+
+/**
+ * Append a new row at the end of a table. The new row's cell count
+ * matches the existing rows. If `texts` is shorter, the remaining cells
+ * are empty.
+ */
+export function appendTableRow(table: WmlTable, texts: readonly string[]): WmlTableRow {
+  const expectedCols = table.rows[0]?.cells.length ?? texts.length;
+  const cells: WmlTableCell[] = [];
+  for (let c = 0; c < expectedCols; c++) {
+    const text = texts[c] ?? "";
+    cells.push({
+      paragraphs: [buildTextParagraph(text)],
+      extras: [],
+    });
+  }
+  const row: WmlTableRow = { cells, extras: [] };
+  table.rows.push(row);
+  return row;
+}
+
+/**
+ * Remove the row at `index` from a table (0-based). Returns true if
+ * removed.
+ */
+export function removeTableRow(table: WmlTable, index: number): boolean {
+  if (index < 0 || index >= table.rows.length) return false;
+  table.rows.splice(index, 1);
+  return true;
+}
+
 function wmlEmpty(local: string, attrs: XmlAttr[]): XmlElement {
   return {
     kind: "element",

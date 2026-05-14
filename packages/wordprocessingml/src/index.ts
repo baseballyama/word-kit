@@ -27,6 +27,17 @@ export {
   sniffImageContentType,
 } from "./drawing.js";
 export {
+  type BuildCommentOptions,
+  buildComment,
+  buildCommentRangeEnd,
+  buildCommentRangeStart,
+  buildCommentReferenceRun,
+  EMPTY_COMMENTS_XML,
+  parseCommentsPart,
+  type WmlCommentsPart,
+  writeCommentsPart,
+} from "./comments.js";
+export {
   abstractNumId,
   numAbstractRef,
   numId,

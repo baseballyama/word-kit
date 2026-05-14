@@ -11,6 +11,10 @@ import {
   addSectPrFooterRef,
   addSectPrHeaderRef,
   buildAbstractNum,
+  buildComment,
+  buildCommentRangeEnd,
+  buildCommentRangeStart,
+  buildCommentReferenceRun,
   buildFooterXml,
   buildHeaderXml,
   buildInlineDrawing,
@@ -23,6 +27,7 @@ import {
   bulletAbstractNumLevels,
   decimalAbstractNumLevels,
   documentText,
+  EMPTY_COMMENTS_XML,
   EMPTY_NUMBERING_XML,
   extensionForImageContentType,
   findStyle,
@@ -31,6 +36,7 @@ import {
   MINIMAL_STYLES_XML,
   numAbstractRef,
   numId as readNumId,
+  parseCommentsPart,
   type PageMargins,
   PAGE_SIZE_LETTER,
   type PageSize,
@@ -46,6 +52,7 @@ import {
   WML_NS,
   WML_RELATIONSHIPS,
   type WmlBlock,
+  type WmlCommentsPart,
   type WmlDocument,
   type WmlNumberingPart,
   type WmlParagraph,
@@ -53,6 +60,7 @@ import {
   type WmlRunPiece,
   type WmlStylesPart,
   type WmlTable,
+  writeCommentsPart,
   writeNumberingPart,
   writeStylesPart,
   writeWmlDocument,
@@ -105,9 +113,17 @@ export interface AppendParagraphOptions {
  */
 const STYLES_PART_NAME = "/word/styles.xml";
 const NUMBERING_PART_NAME = "/word/numbering.xml";
+const COMMENTS_PART_NAME = "/word/comments.xml";
 
 const BULLET_ABSTRACT_NUM_ID = 9000;
 const DECIMAL_ABSTRACT_NUM_ID = 9001;
+
+export interface AddCommentOptions {
+  readonly author: string;
+  readonly text: string;
+  readonly initials?: string;
+  readonly date?: string;
+}
 
 export class Docx {
   private readonly pkg: OpcPackage;
@@ -118,6 +134,8 @@ export class Docx {
   private stylesDirty = false;
   private numberingCache: WmlNumberingPart | undefined;
   private numberingDirty = false;
+  private commentsCache: WmlCommentsPart | undefined;
+  private commentsDirty = false;
 
   private constructor(pkg: OpcPackage, doc: WmlDocument, partName: string) {
     this.pkg = pkg;
@@ -553,6 +571,77 @@ export class Docx {
     return Math.max(1, this.documentRelationships().all.length + 1);
   }
 
+  /** Parsed `word/comments.xml` AST, or `undefined` if absent. */
+  get commentsPart(): WmlCommentsPart | undefined {
+    if (this.commentsCache) return this.commentsCache;
+    const part = this.pkg.getPart(COMMENTS_PART_NAME);
+    if (!part) return undefined;
+    const xml = new TextDecoder("utf-8").decode(part.data);
+    this.commentsCache = parseCommentsPart(parseXml(xml));
+    return this.commentsCache;
+  }
+
+  /**
+   * Attach a comment to the given paragraph. The comment range covers the
+   * entire paragraph: `<w:commentRangeStart>` is inserted at the start,
+   * `<w:commentRangeEnd>` plus a `<w:commentReference>` icon run at the
+   * end. The comment body is stored in `word/comments.xml`.
+   *
+   * Returns the assigned comment id.
+   */
+  addComment(paragraph: WmlParagraph, options: AddCommentOptions): number {
+    const part = this.ensureCommentsPart();
+    const usedIds = new Set<number>();
+    for (const c of part.comments) {
+      const id = c.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id")?.value;
+      if (id !== undefined) {
+        const n = Number.parseInt(id, 10);
+        if (Number.isFinite(n)) usedIds.add(n);
+      }
+    }
+    let nextId = 0;
+    while (usedIds.has(nextId)) nextId++;
+    const comment = buildComment({
+      id: nextId,
+      author: options.author,
+      text: options.text,
+      ...(options.initials !== undefined ? { initials: options.initials } : {}),
+      ...(options.date !== undefined ? { date: options.date } : {}),
+    });
+    part.comments.push(comment);
+    this.commentsDirty = true;
+
+    // Wrap the paragraph's inline children with rangeStart/rangeEnd+ref.
+    paragraph.children = [
+      { kind: "raw", node: buildCommentRangeStart(nextId) },
+      ...paragraph.children,
+      { kind: "raw", node: buildCommentRangeEnd(nextId) },
+      { kind: "raw", node: buildCommentReferenceRun(nextId) },
+    ];
+    this.dirty = true;
+    return nextId;
+  }
+
+  private ensureCommentsPart(): WmlCommentsPart {
+    const existing = this.commentsPart;
+    if (existing) return existing;
+    this.pkg.addPart({
+      name: COMMENTS_PART_NAME,
+      contentType: WML_CONTENT_TYPES.comments,
+      data: new TextEncoder().encode(EMPTY_COMMENTS_XML),
+    });
+    const docRels = this.pkg.partRelationships(this.partName);
+    if (docRels.byType(WML_RELATIONSHIPS.comments).length === 0) {
+      docRels.add({ type: WML_RELATIONSHIPS.comments, target: "comments.xml" });
+    }
+    const xml = new TextDecoder("utf-8").decode(
+      this.pkg.getPart(COMMENTS_PART_NAME)?.data ?? new Uint8Array(),
+    );
+    this.commentsCache = parseCommentsPart(parseXml(xml));
+    this.commentsDirty = true;
+    return this.commentsCache;
+  }
+
   /**
    * Add a header part with the given text and wire it to the body's
    * trailing `<w:sectPr>`. Creates the sectPr if missing.
@@ -704,7 +793,19 @@ export class Docx {
       this.flushNumbering(this.numberingCache);
       this.numberingDirty = false;
     }
+    if (this.commentsDirty && this.commentsCache) {
+      this.flushComments(this.commentsCache);
+      this.commentsDirty = false;
+    }
     return this.pkg.write();
+  }
+
+  private flushComments(part: WmlCommentsPart): void {
+    const xmlDoc = writeCommentsPart(part);
+    const xmlText = serializeXml(xmlDoc);
+    const commentsPart = this.pkg.getPart(COMMENTS_PART_NAME);
+    if (!commentsPart) return;
+    commentsPart.data = new TextEncoder().encode(xmlText);
   }
 
   private flushNumbering(part: WmlNumberingPart): void {

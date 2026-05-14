@@ -1277,6 +1277,19 @@ export class Docx {
   }
 
   /**
+   * Insert an image into an existing paragraph (as the final inline). The
+   * image part is added the same way {@link addImage} does, but the
+   * paragraph already exists — useful when mixing text and images on one
+   * line.
+   */
+  insertImageInto(paragraph: WmlParagraph, bytes: Uint8Array, options: AddImageOptions): WmlRun {
+    const run = this.addImageRun(bytes, options);
+    paragraph.children.push(run);
+    this.dirty = true;
+    return run;
+  }
+
+  /**
    * Like {@link addImage} but returns the constructed run without inserting
    * it. Callers can place the run wherever they want (e.g. inside an
    * existing paragraph).

@@ -10,6 +10,18 @@ const TINY_PNG = new Uint8Array([
   0xae, 0x42, 0x60, 0x82,
 ]);
 
+describe("Docx.insertImageInto", () => {
+  it("appends an image run to an existing paragraph", () => {
+    const doc = Docx.create({ paragraphs: ["Logo:"] });
+    const para = doc.paragraphs[0];
+    if (!para) return;
+    const childrenBefore = para.children.length;
+    doc.insertImageInto(para, TINY_PNG, { widthEmu: 914400, heightEmu: 914400 });
+    expect(para.children.length).toBe(childrenBefore + 1);
+    expect(doc.opc.hasPart("/word/media/image1.png")).toBe(true);
+  });
+});
+
 describe("Docx.addImage", () => {
   it("attaches an image as /word/media/imageN.png and adds a rel", () => {
     const doc = Docx.create({ paragraphs: [] });

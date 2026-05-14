@@ -16,3 +16,6 @@ scratch/
 # Downloaded reference material — see scripts/fetch-specs.sh
 docs/specs/ecma-376/
 docs/specs/xsd/
+
+# Claude Code runtime artifacts
+.claude/scheduled_tasks.lock

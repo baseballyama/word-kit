@@ -1776,6 +1776,18 @@ export class Docx {
     };
   }
 
+  /**
+   * Produce an independent copy of this document. The two documents share
+   * no mutable state — edits to one do not affect the other.
+   *
+   * Internally this serializes and re-reads, which incurs a ZIP round-trip
+   * but is the cleanest way to guarantee a deep copy across both the OPC
+   * package and the WML AST.
+   */
+  clone(): Docx {
+    return Docx.open(this.toUint8Array());
+  }
+
   /** Serialize the package back to `.docx` bytes. */
   toUint8Array(): Uint8Array {
     if (this.dirty) {

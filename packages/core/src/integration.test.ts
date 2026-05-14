@@ -12,11 +12,15 @@ import {
   addNumberedList,
   addStyle,
   addTable,
+  addTableOfContents,
+  appendMergeField,
   appendParagraph,
   commentsPart,
   createDocx,
   openDocx,
   paragraphs,
+  removeAllTables,
+  removeTable,
   replaceText,
   setPageMargins,
   setPageOrientation,
@@ -159,5 +163,37 @@ describe("kitchen sink — every Docx feature in one document", () => {
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     );
     expect(blob.size).toBeGreaterThan(0);
+  });
+
+  it("TOC + MERGEFIELD + table removal compose cleanly through save+reopen", () => {
+    const doc = createDocx({ paragraphs: [] });
+
+    addTableOfContents(doc, { headingLevels: { from: 1, to: 2 } });
+    appendParagraph(doc, "Dear ");
+    const greeting = paragraphs(doc).at(-1)!;
+    appendMergeField(doc, greeting, "FirstName");
+
+    addTable(doc, [
+      ["A", "B"],
+      ["1", "2"],
+    ]);
+    addTable(doc, [["X"]]);
+    expect(tables(doc)).toHaveLength(2);
+
+    // Drop the second table by index — first survives.
+    expect(removeTable(doc, 1)).toBe(true);
+    expect(tables(doc)).toHaveLength(1);
+
+    const reopened = openDocx(toUint8Array(doc));
+    const xmlText = new TextDecoder().decode(
+      reopened.opc.parts.get("/word/document.xml")?.data ?? new Uint8Array(),
+    );
+    expect(xmlText).toContain('TOC \\o "1-2" \\h \\z \\u');
+    expect(xmlText).toContain("MERGEFIELD FirstName");
+    expect(tables(reopened)).toHaveLength(1);
+
+    // removeAllTables drops the survivor too.
+    expect(removeAllTables(reopened)).toBe(1);
+    expect(tables(reopened)).toHaveLength(0);
   });
 });

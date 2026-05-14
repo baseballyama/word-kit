@@ -35,10 +35,14 @@ export {
   setTableBorders,
   setTableCellShading,
   setTableCellText,
+  setTableCellVerticalAlign,
   setTableRowAsHeader,
+  setTableRowHeight,
   type TableBorderStyle,
   type TableBordersOptions,
   type TableCellShadingOptions,
+  type TableCellVerticalAlign,
+  type TableRowHeightRule,
 } from "@word-kit/wml";
 // Re-export types that are part of the public surface area so consumers can
 // use them without importing from internal packages directly.

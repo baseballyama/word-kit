@@ -40,10 +40,14 @@ export {
   setTableBorders,
   setTableCellShading,
   setTableCellText,
+  setTableCellVerticalAlign,
   setTableRowAsHeader,
+  setTableRowHeight,
   type TableBorderStyle,
   type TableBordersOptions,
   type TableCellShadingOptions,
+  type TableCellVerticalAlign,
+  type TableRowHeightRule,
 } from "./builders.js";
 export {
   buildInlineDrawing,

@@ -276,6 +276,66 @@ export function setTableCellShading(cell: WmlTableCell, options: TableCellShadin
 }
 
 /**
+ * Vertical alignment for content inside a table cell. Maps to `<w:vAlign>`.
+ */
+export type TableCellVerticalAlign = "top" | "center" | "bottom";
+
+/** Set the vertical alignment of content inside a cell. */
+export function setTableCellVerticalAlign(cell: WmlTableCell, align: TableCellVerticalAlign): void {
+  const tcPr = cell.tcPr ?? {
+    kind: "element",
+    name: { uri: WML_NS, local: "tcPr", prefix: "w" },
+    attrs: [],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  const children = tcPr.children as XmlElement[];
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === "vAlign") {
+      children.splice(i, 1);
+    }
+  }
+  children.push(wmlEmpty("vAlign", [wmlAttr("val", align)]));
+  if (!cell.tcPr) cell.tcPr = tcPr;
+}
+
+export type TableRowHeightRule = "atLeast" | "exact" | "auto";
+
+/**
+ * Set an explicit row height in twips. `rule` defaults to `"atLeast"`,
+ * meaning the row grows past `heightTwips` if its content overflows.
+ * `"exact"` clips overflowing content; `"auto"` lets Word resize freely
+ * and ignores `heightTwips` (Word's UI calls this "automatic").
+ */
+export function setTableRowHeight(
+  row: WmlTableRow,
+  heightTwips: number,
+  rule: TableRowHeightRule = "atLeast",
+): void {
+  const trPr = row.trPr ?? {
+    kind: "element",
+    name: { uri: WML_NS, local: "trPr", prefix: "w" },
+    attrs: [],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  const children = trPr.children as XmlElement[];
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === "trHeight") {
+      children.splice(i, 1);
+    }
+  }
+  children.push(
+    wmlEmpty("trHeight", [wmlAttr("val", String(heightTwips)), wmlAttr("hRule", rule)]),
+  );
+  if (!row.trPr) row.trPr = trPr;
+}
+
+/**
  * Mark a table row as a *header row* — its content is repeated at the
  * top of every page when the table breaks across pages. Word's UI
  * equivalent is "Repeat as header row at the top of each page".

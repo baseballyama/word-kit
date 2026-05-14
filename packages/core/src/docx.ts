@@ -9,6 +9,8 @@ import {
 } from "@word-kit/opc";
 import {
   buildInlineDrawing,
+  buildTextTable,
+  type BuildTableOptions,
   documentText,
   extensionForImageContentType,
   findText,
@@ -23,6 +25,7 @@ import {
   type WmlParagraph,
   type WmlRun,
   type WmlRunPiece,
+  type WmlTable,
   writeWmlDocument,
 } from "@word-kit/wml";
 
@@ -124,9 +127,26 @@ export class Docx {
     return this.docModel;
   }
 
-  /** Paragraph blocks in document order (skipping raw blocks like tables). */
+  /** Paragraph blocks in document order. */
   get paragraphs(): readonly WmlParagraph[] {
     return this.docModel.body.blocks.filter(isParagraph);
+  }
+
+  /** Table blocks in document order. */
+  get tables(): readonly WmlTable[] {
+    return this.docModel.body.blocks.filter(isTable);
+  }
+
+  /**
+   * Append a table to the body. `rows` is a row-major matrix of strings;
+   * each cell becomes a single paragraph with a single run containing the
+   * supplied text. Empty cells are allowed.
+   */
+  addTable(rows: ReadonlyArray<ReadonlyArray<string>>, options: BuildTableOptions = {}): WmlTable {
+    const table = buildTextTable(rows, options);
+    this.docModel.body.blocks.push(table);
+    this.dirty = true;
+    return table;
   }
 
   /** Search the document for all matches of `query`. */
@@ -352,4 +372,8 @@ function findMainDocumentPart(pkg: OpcPackage): Part | undefined {
 
 function isParagraph(block: WmlBlock): block is WmlParagraph {
   return block.kind === "paragraph";
+}
+
+function isTable(block: WmlBlock): block is WmlTable {
+  return block.kind === "table";
 }

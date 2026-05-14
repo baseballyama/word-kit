@@ -27,7 +27,35 @@ export interface WmlBody {
   extras: PassThrough[];
 }
 
-export type WmlBlock = WmlParagraph | WmlRawBlock;
+export type WmlBlock = WmlParagraph | WmlTable | WmlRawBlock;
+
+export interface WmlTable {
+  readonly kind: "table";
+  /** `<w:tblPr>` retained as raw XML; typed property access lands later. */
+  tblPr?: XmlElement;
+  /** `<w:tblGrid>` retained as raw XML. */
+  tblGrid?: XmlElement;
+  rows: WmlTableRow[];
+  /** Unknown children of `<w:tbl>`, with their original position. */
+  extras: PassThrough[];
+}
+
+export interface WmlTableRow {
+  /** `<w:trPr>` retained as raw XML. */
+  trPr?: XmlElement;
+  cells: WmlTableCell[];
+  /** Unknown children of `<w:tr>`, with their original position. */
+  extras: PassThrough[];
+}
+
+export interface WmlTableCell {
+  /** `<w:tcPr>` retained as raw XML. */
+  tcPr?: XmlElement;
+  /** Paragraphs inside the cell. Nested tables / other content live in extras. */
+  paragraphs: WmlParagraph[];
+  /** Unknown children of `<w:tc>`, with their original position. */
+  extras: PassThrough[];
+}
 
 export interface WmlParagraph {
   readonly kind: "paragraph";

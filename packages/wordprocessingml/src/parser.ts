@@ -9,6 +9,9 @@ import type {
   WmlParagraph,
   WmlRun,
   WmlRunPiece,
+  WmlTable,
+  WmlTableCell,
+  WmlTableRow,
 } from "./types.js";
 
 /**
@@ -51,11 +54,15 @@ function parseBody(body: XmlElement): WmlBody {
       blocks.push(parseParagraph(child));
       continue;
     }
+    if (isWmlElement(child, "tbl")) {
+      blocks.push(parseTable(child));
+      continue;
+    }
     if (isWmlElement(child, "sectPr") && i === lastChildIdx) {
       sectPr = child;
       continue;
     }
-    // Known but unstructured (tbl/sdt/...) or unknown: keep as raw block.
+    // Other known (sdt, ...) or unknown: keep as raw block.
     blocks.push({ kind: "raw", node: child });
   }
 
@@ -197,6 +204,98 @@ function parseRunPiece(el: XmlElement): WmlRunPiece | undefined {
     default:
       return undefined;
   }
+}
+
+function parseTable(tbl: XmlElement): WmlTable {
+  let tblPr: XmlElement | undefined;
+  let tblGrid: XmlElement | undefined;
+  const rows: WmlTableRow[] = [];
+  const extras: PassThrough[] = [];
+  for (let i = 0; i < tbl.children.length; i++) {
+    const child = tbl.children[i];
+    if (!child) continue;
+    if (child.kind !== "element") {
+      extras.push({ slot: i, node: child });
+      continue;
+    }
+    if (isWmlElement(child, "tblPr")) {
+      tblPr = child;
+      continue;
+    }
+    if (isWmlElement(child, "tblGrid")) {
+      tblGrid = child;
+      continue;
+    }
+    if (isWmlElement(child, "tr")) {
+      rows.push(parseTableRow(child));
+      continue;
+    }
+    extras.push({ slot: i, node: child });
+  }
+  return {
+    kind: "table",
+    ...(tblPr ? { tblPr } : {}),
+    ...(tblGrid ? { tblGrid } : {}),
+    rows,
+    extras,
+  };
+}
+
+function parseTableRow(tr: XmlElement): WmlTableRow {
+  let trPr: XmlElement | undefined;
+  const cells: WmlTableCell[] = [];
+  const extras: PassThrough[] = [];
+  for (let i = 0; i < tr.children.length; i++) {
+    const child = tr.children[i];
+    if (!child) continue;
+    if (child.kind !== "element") {
+      extras.push({ slot: i, node: child });
+      continue;
+    }
+    if (isWmlElement(child, "trPr")) {
+      trPr = child;
+      continue;
+    }
+    if (isWmlElement(child, "tc")) {
+      cells.push(parseTableCell(child));
+      continue;
+    }
+    extras.push({ slot: i, node: child });
+  }
+  return {
+    ...(trPr ? { trPr } : {}),
+    cells,
+    extras,
+  };
+}
+
+function parseTableCell(tc: XmlElement): WmlTableCell {
+  let tcPr: XmlElement | undefined;
+  const paragraphs: WmlParagraph[] = [];
+  const extras: PassThrough[] = [];
+  for (let i = 0; i < tc.children.length; i++) {
+    const child = tc.children[i];
+    if (!child) continue;
+    if (child.kind !== "element") {
+      extras.push({ slot: i, node: child });
+      continue;
+    }
+    if (isWmlElement(child, "tcPr")) {
+      tcPr = child;
+      continue;
+    }
+    if (isWmlElement(child, "p")) {
+      paragraphs.push(parseParagraph(child));
+      continue;
+    }
+    // Nested tables, sdt, etc. are kept as extras for now.
+    extras.push({ slot: i, node: child });
+  }
+  return {
+    ...(tcPr ? { tcPr } : {}),
+    paragraphs,
+    extras,
+  };
 }
 
 function textContent(el: XmlElement): string {

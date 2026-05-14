@@ -10,6 +10,9 @@ import type {
   WmlParagraph,
   WmlRun,
   WmlRunPiece,
+  WmlTable,
+  WmlTableCell,
+  WmlTableRow,
 } from "./types.js";
 
 /**
@@ -57,8 +60,84 @@ function writeBody(body: WmlBody): XmlElement {
 }
 
 function blockToElement(block: WmlBlock): XmlElement {
-  if (block.kind === "raw") return block.node;
-  return paragraphToElement(block);
+  switch (block.kind) {
+    case "raw":
+      return block.node;
+    case "paragraph":
+      return paragraphToElement(block);
+    case "table":
+      return tableToElement(block);
+    default: {
+      const unhandled: never = block;
+      throw new Error(`Unhandled block kind: ${(unhandled as { kind: string }).kind}`);
+    }
+  }
+}
+
+function tableToElement(t: WmlTable): XmlElement {
+  const recognized: XmlNode[] = [];
+  if (t.tblPr) recognized.push(t.tblPr);
+  if (t.tblGrid) recognized.push(t.tblGrid);
+  for (const row of t.rows) {
+    recognized.push(tableRowToElement(row));
+  }
+  const children = spliceWithExtras(recognized, t.extras);
+  return {
+    kind: "element",
+    name: { uri: WML_NS, local: "tbl", prefix: "w" },
+    attrs: [],
+    children,
+    xmlSpace: "default",
+    selfClosing: children.length === 0,
+  };
+}
+
+function tableRowToElement(row: WmlTableRow): XmlElement {
+  const recognized: XmlNode[] = [];
+  if (row.trPr) recognized.push(row.trPr);
+  for (const cell of row.cells) {
+    recognized.push(tableCellToElement(cell));
+  }
+  const children = spliceWithExtras(recognized, row.extras);
+  return {
+    kind: "element",
+    name: { uri: WML_NS, local: "tr", prefix: "w" },
+    attrs: [],
+    children,
+    xmlSpace: "default",
+    selfClosing: children.length === 0,
+  };
+}
+
+function tableCellToElement(cell: WmlTableCell): XmlElement {
+  const recognized: XmlNode[] = [];
+  if (cell.tcPr) recognized.push(cell.tcPr);
+  for (const p of cell.paragraphs) {
+    recognized.push(paragraphToElement(p));
+  }
+  const children = spliceWithExtras(recognized, cell.extras);
+  // A cell with no paragraphs at all is invalid; emit one empty <w:p/>.
+  const ensured =
+    children.length === 0
+      ? [
+          {
+            kind: "element" as const,
+            name: { uri: WML_NS, local: "p", prefix: "w" },
+            attrs: [],
+            children: [],
+            xmlSpace: "default" as const,
+            selfClosing: true,
+          },
+        ]
+      : children;
+  return {
+    kind: "element",
+    name: { uri: WML_NS, local: "tc", prefix: "w" },
+    attrs: [],
+    children: ensured,
+    xmlSpace: "default",
+    selfClosing: false,
+  };
 }
 
 function paragraphToElement(p: WmlParagraph): XmlElement {

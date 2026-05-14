@@ -15,6 +15,12 @@ export {
   WML_RELATIONSHIPS,
 } from "./namespaces.js";
 export {
+  type BuildTableOptions,
+  buildTextParagraph,
+  buildTextRun,
+  buildTextTable,
+} from "./builders.js";
+export {
   buildInlineDrawing,
   extensionForImageContentType,
   type InlineDrawingOptions,
@@ -41,5 +47,8 @@ export type {
   WmlRawInline,
   WmlRun,
   WmlRunPiece,
+  WmlTable,
+  WmlTableCell,
+  WmlTableRow,
 } from "./types.js";
 export { writeWmlDocument } from "./writer.js";

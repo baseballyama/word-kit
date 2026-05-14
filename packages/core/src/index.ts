@@ -21,5 +21,8 @@ export type {
   WmlParagraph,
   WmlRun,
   WmlRunPiece,
+  WmlTable,
+  WmlTableCell,
+  WmlTableRow,
 } from "@word-kit/wml";
 export { VERSION } from "./version.js";

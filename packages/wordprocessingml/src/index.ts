@@ -25,6 +25,7 @@ export {
   getParagraphAlignment,
   getParagraphNumbering,
   getParagraphStyle,
+  getRunFormat,
   getTableCellText,
   type ParagraphAlignment,
   type ParagraphIndent,

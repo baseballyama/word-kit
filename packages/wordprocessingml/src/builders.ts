@@ -317,6 +317,54 @@ export function clearRunFormat(run: WmlRun): void {
   delete run.rPr;
 }
 
+/**
+ * Read back the formatting a run currently has on its `<w:rPr>`. Returns a
+ * `RunFormatting` with only the keys that are actually present, so callers
+ * can round-trip via `setRunFormat(other, getRunFormat(run))`.
+ */
+export function getRunFormat(run: WmlRun): RunFormatting {
+  // Build a writable scratch object; only keys we actually observe will
+  // be set, then cast to the readonly `RunFormatting` on return.
+  const out: Record<string, unknown> = {};
+  if (!run.rPr) return out as RunFormatting;
+  for (const child of run.rPr.children) {
+    if (child.kind !== "element" || child.name.uri !== WML_NS) continue;
+    const local = child.name.local;
+    if (local === "b") out.bold = true;
+    else if (local === "i") out.italic = true;
+    else if (local === "strike") out.strike = true;
+    else if (local === "u") {
+      const v = child.attrs.find((a) => a.name.local === "val")?.value;
+      if (
+        v === "single" ||
+        v === "double" ||
+        v === "thick" ||
+        v === "dotted" ||
+        v === "wave" ||
+        v === "none"
+      ) {
+        out.underline = v;
+      }
+    } else if (local === "color") {
+      const v = child.attrs.find((a) => a.name.local === "val")?.value;
+      if (v !== undefined) out.color = v;
+    } else if (local === "highlight") {
+      const v = child.attrs.find((a) => a.name.local === "val")?.value;
+      if (v !== undefined) out.highlight = v;
+    } else if (local === "sz") {
+      const v = child.attrs.find((a) => a.name.local === "val")?.value;
+      const n = v !== undefined ? Number.parseInt(v, 10) : NaN;
+      if (Number.isFinite(n)) out.fontSizeHalfPoints = n;
+    } else if (local === "rFonts") {
+      const ascii = child.attrs.find((a) => a.name.local === "ascii")?.value;
+      const east = child.attrs.find((a) => a.name.local === "eastAsia")?.value;
+      if (ascii !== undefined) out.font = ascii;
+      if (east !== undefined) out.fontEastAsia = east;
+    }
+  }
+  return out as RunFormatting;
+}
+
 export type ParagraphAlignment = "left" | "center" | "right" | "both" | "distribute";
 
 /** Set the paragraph's `<w:jc w:val="..."/>` justification. */

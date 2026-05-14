@@ -1,8 +1,11 @@
 # word-kit 実装計画 (v1)
 
-> ステータス: **実装中**。M1-M13 + 多数の拡張完了 (機能完全度 90%+)。158 tests、すべて green、7000+ LOC、main に直接 push。
+> ステータス: **実装中**。M1-M13 + 多数の拡張完了 (機能完全度 90%+)。263 tests、すべて green、7000+ LOC、main に直接 push。
 > スコープは **`.docx` (WordprocessingML)** のみ。pptx / xlsx は Out of scope (`CLAUDE.md` 参照)。
 > OPC / DrawingML 層は **将来 pptx/xlsx へ転用可能** な形で設計するが、当面は docx を成立させることに集中する。
+>
+> API 形態: **関数 API** (no classes)。`Docx` は plain `interface`、各操作は standalone export。
+> bundler が未使用関数を tree-shake 可能で、CI で minimal entry (41KB) と full entry (114KB) の差分を assert する (`scripts/check-tree-shake.mjs`)。
 
 ## 進捗ステータス (2026-05-15)
 
@@ -12,7 +15,7 @@
 | M2  | XML AST コア (`@word-kit/ooxml-xml`)                                        | ✅ 完了                                            |
 | M3  | WordprocessingML 最小 AST (parser + writer)                                 | ✅ 完了                                            |
 | M4  | Run-spanning find/replace                                                   | ✅ 完了                                            |
-| M5  | `Docx.create` / `Docx.open` / `toUint8Array` / `toBlob`                     | ✅ 完了                                            |
+| M5  | `createDocx` / `openDocx` / `toUint8Array` / `toBlob` (function API)        | ✅ 完了                                            |
 | M6  | ブロック挿入 + 段落 API (`appendParagraph`, `appendPageBreak`)              | ✅ 完了                                            |
 | M7  | 画像 (inline DrawingML, `addImage` / `addImageRun`)                         | ✅ 完了                                            |
 | M8  | テーブル (構造化 AST, `addTable`)                                           | ✅ 完了                                            |

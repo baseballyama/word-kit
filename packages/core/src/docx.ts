@@ -230,7 +230,7 @@ export function openDocx(bytes: Uint8Array): Docx {
 /**
  * Convenience for browser-side callers: open a `.docx` from a `Blob` or
  * `File`. Awaits the underlying `ArrayBuffer` and delegates to
- * {@link Docx.open}.
+ * {@link openDocx}.
  */
 export async function fromBlob(blob: Blob): Promise<Docx> {
   const buf = await blob.arrayBuffer();

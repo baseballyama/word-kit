@@ -1,3 +1,4 @@
+import { getPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -21,7 +22,7 @@ describe("Docx.removeAllFootnotes", () => {
     doc.removeAllFootnotes();
     const reopened = Docx.open(doc.toUint8Array());
     const xml = new TextDecoder().decode(
-      reopened.opc.getPart("/word/document.xml")?.data ?? new Uint8Array(),
+      getPart(reopened.opc, "/word/document.xml")?.data ?? new Uint8Array(),
     );
     expect(xml).not.toContain("footnoteReference");
   });

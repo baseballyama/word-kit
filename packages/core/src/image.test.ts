@@ -1,3 +1,4 @@
+import { hasPart, partRelationships, relationshipsByType } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -18,7 +19,7 @@ describe("Docx.insertImageInto", () => {
     const childrenBefore = para.children.length;
     doc.insertImageInto(para, TINY_PNG, { widthEmu: 914400, heightEmu: 914400 });
     expect(para.children.length).toBe(childrenBefore + 1);
-    expect(doc.opc.hasPart("/word/media/image1.png")).toBe(true);
+    expect(hasPart(doc.opc, "/word/media/image1.png")).toBe(true);
   });
 });
 
@@ -28,9 +29,10 @@ describe("Docx.addImage", () => {
     doc.addImage(TINY_PNG, { widthEmu: 914400, heightEmu: 914400 });
     const bytes = doc.toUint8Array();
     const reopened = Docx.open(bytes);
-    expect(reopened.opc.hasPart("/word/media/image1.png")).toBe(true);
-    const rels = reopened.opc.partRelationships("/word/document.xml");
-    const imageRels = rels.byType(
+    expect(hasPart(reopened.opc, "/word/media/image1.png")).toBe(true);
+    const rels = partRelationships(reopened.opc, "/word/document.xml");
+    const imageRels = relationshipsByType(
+      rels,
       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
     );
     expect(imageRels).toHaveLength(1);
@@ -57,8 +59,8 @@ describe("Docx.addImage", () => {
     doc.addImage(TINY_PNG, { widthEmu: 100000, heightEmu: 100000 });
     const bytes = doc.toUint8Array();
     const reopened = Docx.open(bytes);
-    expect(reopened.opc.hasPart("/word/media/image1.png")).toBe(true);
-    expect(reopened.opc.hasPart("/word/media/image2.png")).toBe(true);
+    expect(hasPart(reopened.opc, "/word/media/image1.png")).toBe(true);
+    expect(hasPart(reopened.opc, "/word/media/image2.png")).toBe(true);
   });
 
   it("throws if the content type cannot be detected and none is supplied", () => {
@@ -74,6 +76,6 @@ describe("Docx.addImage", () => {
       heightEmu: 100,
       contentType: "image/png",
     });
-    expect(doc.opc.hasPart("/word/media/image1.png")).toBe(true);
+    expect(hasPart(doc.opc, "/word/media/image1.png")).toBe(true);
   });
 });

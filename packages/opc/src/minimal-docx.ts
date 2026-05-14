@@ -1,4 +1,6 @@
-import { OpcPackage } from "./package.js";
+import { setContentTypeDefault, setContentTypeOverride } from "./content-types.js";
+import { addPart, emptyOpcPackage, type OpcPackage, packageRelationships } from "./package.js";
+import { addRelationship } from "./relationships.js";
 
 const WML_DOC_CT =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
@@ -24,22 +26,26 @@ const MINIMAL_DOCUMENT_XML = [
  * paragraph. The result opens cleanly in Microsoft Word and LibreOffice
  * Writer.
  *
- * Used as a test fixture and as the seed package for `Docx.create()` once
- * the higher-level API is wired up.
+ * Used as a test fixture and as the seed package for `createDocx()` from
+ * `@word-kit/core`.
  */
 export function buildMinimalDocx(): OpcPackage {
-  const pkg = OpcPackage.empty();
-  pkg.contentTypes.setDefault("rels", "application/vnd.openxmlformats-package.relationships+xml");
-  pkg.contentTypes.setDefault("xml", "application/xml");
-  pkg.contentTypes.setOverride("/word/document.xml", WML_DOC_CT);
+  const pkg = emptyOpcPackage();
+  setContentTypeDefault(
+    pkg.contentTypes,
+    "rels",
+    "application/vnd.openxmlformats-package.relationships+xml",
+  );
+  setContentTypeDefault(pkg.contentTypes, "xml", "application/xml");
+  setContentTypeOverride(pkg.contentTypes, "/word/document.xml", WML_DOC_CT);
 
-  pkg.packageRelationships.add({
+  addRelationship(packageRelationships(pkg), {
     id: "rId1",
     type: OFFICE_DOCUMENT_REL,
     target: "word/document.xml",
   });
 
-  pkg.addPart({
+  addPart(pkg, {
     name: "/word/document.xml",
     contentType: WML_DOC_CT,
     data: new TextEncoder().encode(MINIMAL_DOCUMENT_XML),

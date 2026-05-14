@@ -1,3 +1,4 @@
+import { hasPart, partRelationships, relationshipsByType } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -40,7 +41,7 @@ describe("Docx.addFootnote", () => {
     const reopened = Docx.open(doc.toUint8Array());
     expect(reopened.footnotesPart).toBeDefined();
     expect(reopened.footnotesPart?.footnotes.length).toBeGreaterThanOrEqual(3);
-    expect(reopened.opc.hasPart("/word/footnotes.xml")).toBe(true);
+    expect(hasPart(reopened.opc, "/word/footnotes.xml")).toBe(true);
   });
 
   it("registers footnotes relationship from document.xml", () => {
@@ -48,8 +49,9 @@ describe("Docx.addFootnote", () => {
     const para = doc.paragraphs[0];
     if (!para) return;
     doc.addFootnote(para, "Note");
-    const rels = doc.opc.partRelationships("/word/document.xml");
-    const fr = rels.byType(
+    const rels = partRelationships(doc.opc, "/word/document.xml");
+    const fr = relationshipsByType(
+      rels,
       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes",
     );
     expect(fr).toHaveLength(1);
@@ -71,9 +73,12 @@ describe("Docx.addEndnote", () => {
     if (!para) return;
     doc.addEndnote(para, "End note");
     expect(doc.endnotesPart).toBeDefined();
-    const rels = doc.opc.partRelationships("/word/document.xml");
+    const rels = partRelationships(doc.opc, "/word/document.xml");
     expect(
-      rels.byType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes"),
+      relationshipsByType(
+        rels,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes",
+      ),
     ).toHaveLength(1);
   });
 });

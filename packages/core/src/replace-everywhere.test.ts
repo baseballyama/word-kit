@@ -1,3 +1,4 @@
+import { getPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -13,10 +14,10 @@ describe("Docx.replaceTextEverywhere", () => {
     const reopened = Docx.open(bytes);
     expect(reopened.text).toContain("body has 山田太郎");
     const headerXml = new TextDecoder().decode(
-      reopened.opc.getPart("/word/header1.xml")?.data ?? new Uint8Array(),
+      getPart(reopened.opc, "/word/header1.xml")?.data ?? new Uint8Array(),
     );
     const footerXml = new TextDecoder().decode(
-      reopened.opc.getPart("/word/footer1.xml")?.data ?? new Uint8Array(),
+      getPart(reopened.opc, "/word/footer1.xml")?.data ?? new Uint8Array(),
     );
     expect(headerXml).toContain("Header: 山田太郎");
     expect(footerXml).toContain("Footer: 山田太郎");
@@ -32,7 +33,7 @@ describe("Docx.replaceTextEverywhere", () => {
     const bytes = doc.toUint8Array();
     const reopened = Docx.open(bytes);
     const commentsXml = new TextDecoder().decode(
-      reopened.opc.getPart("/word/comments.xml")?.data ?? new Uint8Array(),
+      getPart(reopened.opc, "/word/comments.xml")?.data ?? new Uint8Array(),
     );
     expect(commentsXml).toContain("Please update Alice.");
   });
@@ -45,7 +46,7 @@ describe("Docx.replaceTextEverywhere", () => {
     doc.replaceTextEverywhere("{{name}}", "Bob");
     const reopened = Docx.open(doc.toUint8Array());
     const fnXml = new TextDecoder().decode(
-      reopened.opc.getPart("/word/footnotes.xml")?.data ?? new Uint8Array(),
+      getPart(reopened.opc, "/word/footnotes.xml")?.data ?? new Uint8Array(),
     );
     expect(fnXml).toContain("Footnote with Bob");
   });
@@ -62,7 +63,7 @@ describe("Docx.replaceTextEverywhere", () => {
     const reopened = Docx.open(doc.toUint8Array());
     expect(reopened.text).toContain("body AAA");
     const headerXml = new TextDecoder().decode(
-      reopened.opc.getPart("/word/header1.xml")?.data ?? new Uint8Array(),
+      getPart(reopened.opc, "/word/header1.xml")?.data ?? new Uint8Array(),
     );
     expect(headerXml).toContain("Header BBB");
   });

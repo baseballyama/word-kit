@@ -1,3 +1,4 @@
+import { getPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -48,12 +49,12 @@ describe("Docx.images / Docx.replaceImage", () => {
     const doc = Docx.create({ paragraphs: [] });
     doc.addImage(TINY_PNG, { widthEmu: 1000, heightEmu: 1000 });
     expect(doc.replaceImage("/word/media/image1.png", OTHER_PNG)).toBe(true);
-    const part = doc.opc.getPart("/word/media/image1.png");
+    const part = getPart(doc.opc, "/word/media/image1.png");
     expect(part?.data.length).toBe(OTHER_PNG.length);
 
     // Survives save+reopen with the new bytes:
     const reopened = Docx.open(doc.toUint8Array());
-    expect(reopened.opc.getPart("/word/media/image1.png")?.data.length).toBe(OTHER_PNG.length);
+    expect(getPart(reopened.opc, "/word/media/image1.png")?.data.length).toBe(OTHER_PNG.length);
   });
 
   it("replaceImage returns false for unknown parts", () => {

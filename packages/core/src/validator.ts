@@ -1,5 +1,14 @@
 import { parseXml, type XmlElement } from "@word-kit/ooxml-xml";
-import type { OpcPackage } from "@word-kit/opc";
+import {
+  allRelationships,
+  getPart,
+  hasPart,
+  listParts,
+  type OpcPackage,
+  packageRelationships,
+  partRelationships,
+  relationshipsByType,
+} from "@word-kit/opc";
 import { WML_NS, WML_RELATIONSHIPS } from "@word-kit/wml";
 
 /**
@@ -32,7 +41,7 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
   const allRelSources: Array<{ source: "package" | string; setOwner: string }> = [
     { source: "package", setOwner: "/_rels/.rels" },
   ];
-  for (const part of pkg.listParts()) {
+  for (const part of listParts(pkg)) {
     if (part.name === "/[Content_Types].xml") continue;
     allRelSources.push({ source: part.name, setOwner: relsPartFor(part.name) });
   }
@@ -41,11 +50,11 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
     if (seenSources.has(entry.setOwner)) continue;
     seenSources.add(entry.setOwner);
     const set =
-      entry.source === "package" ? pkg.packageRelationships : pkg.partRelationships(entry.source);
-    for (const rel of set.all) {
+      entry.source === "package" ? packageRelationships(pkg) : partRelationships(pkg, entry.source);
+    for (const rel of allRelationships(set)) {
       if (rel.targetMode === "External") continue;
       const absolute = resolveRel(entry.source, rel.target);
-      if (!pkg.hasPart(absolute)) {
+      if (!hasPart(pkg, absolute)) {
         issues.push({
           level: "error",
           code: "rel-target-missing",
@@ -57,7 +66,7 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
   }
 
   // 2) Walk /word/document.xml and verify cross-part references.
-  const docPart = pkg.getPart("/word/document.xml");
+  const docPart = getPart(pkg, "/word/document.xml");
   if (!docPart) return issues; // Already flagged by rel check above
   const docXml = new TextDecoder("utf-8").decode(docPart.data);
   let docTree: ReturnType<typeof parseXml>;
@@ -80,7 +89,7 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
   const bookmarkEndIds = collectAttrIds(docTree.root, "bookmarkEnd");
 
   if (commentRefIds.size > 0) {
-    const commentsPart = pkg.getPart("/word/comments.xml");
+    const commentsPart = getPart(pkg, "/word/comments.xml");
     if (!commentsPart) {
       issues.push({
         level: "error",
@@ -103,7 +112,7 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
   }
 
   if (footnoteRefIds.size > 0) {
-    const fnPart = pkg.getPart("/word/footnotes.xml");
+    const fnPart = getPart(pkg, "/word/footnotes.xml");
     if (!fnPart) {
       issues.push({
         level: "error",
@@ -126,7 +135,7 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
   }
 
   if (endnoteRefIds.size > 0) {
-    const enPart = pkg.getPart("/word/endnotes.xml");
+    const enPart = getPart(pkg, "/word/endnotes.xml");
     if (!enPart) {
       issues.push({
         level: "error",
@@ -162,11 +171,11 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
 
   // 3) Image rels: target media part must exist (already covered by rel
   // check, but flag with a more specific message).
-  const docRels = pkg.partRelationships("/word/document.xml");
-  for (const rel of docRels.byType(WML_RELATIONSHIPS.image)) {
+  const docRels = partRelationships(pkg, "/word/document.xml");
+  for (const rel of relationshipsByType(docRels, WML_RELATIONSHIPS.image)) {
     if (rel.targetMode === "External") continue;
     const partName = resolveRel("/word/document.xml", rel.target);
-    if (!pkg.hasPart(partName)) {
+    if (!hasPart(pkg, partName)) {
       issues.push({
         level: "error",
         code: "image-missing",
@@ -180,7 +189,7 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
   // the document should resolve to a <w:style> in styles.xml. Word
   // tolerates dangling references (falls back to Normal) so this is a
   // warning, not an error.
-  const stylesPart = pkg.getPart("/word/styles.xml");
+  const stylesPart = getPart(pkg, "/word/styles.xml");
   if (stylesPart) {
     const knownStyleIds = collectStyleIds(stylesPart.data);
     const referencedStyles = new Set<string>();
@@ -199,7 +208,7 @@ export function validatePackage(pkg: OpcPackage): ValidationIssue[] {
 
   // 5) Numbering references: every <w:numId w:val> should resolve to a
   // <w:num> in numbering.xml.
-  const numberingPart = pkg.getPart("/word/numbering.xml");
+  const numberingPart = getPart(pkg, "/word/numbering.xml");
   const usedNumIds = collectNumIds(docTree.root);
   if (usedNumIds.size > 0) {
     if (!numberingPart) {

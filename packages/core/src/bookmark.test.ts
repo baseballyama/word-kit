@@ -1,3 +1,4 @@
+import { getPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -9,7 +10,7 @@ describe("Docx.appendPageBreak", () => {
     expect(doc.paragraphs).toHaveLength(3);
     const bytes = doc.toUint8Array();
     const reopened = Docx.open(bytes);
-    const part = reopened.opc.getPart("/word/document.xml");
+    const part = getPart(reopened.opc, "/word/document.xml");
     const xml = new TextDecoder().decode(part?.data ?? new Uint8Array());
     expect(xml).toContain('<w:br w:type="page"/>');
   });
@@ -35,7 +36,7 @@ describe("Docx.addBookmark + addInternalHyperlink", () => {
 
     // Verify save+reopen preserves both
     const reopened = Docx.open(doc.toUint8Array());
-    const part = reopened.opc.getPart("/word/document.xml");
+    const part = getPart(reopened.opc, "/word/document.xml");
     const xml = new TextDecoder().decode(part?.data ?? new Uint8Array());
     expect(xml).toContain('w:name="ch1"');
     expect(xml).toContain('w:anchor="ch1"');

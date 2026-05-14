@@ -1,3 +1,4 @@
+import { hasPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -9,8 +10,8 @@ describe("Docx.removeAllHeaders", () => {
     expect(doc.headers).toHaveLength(2);
     expect(doc.removeAllHeaders()).toBe(2);
     expect(doc.headers).toHaveLength(0);
-    expect(doc.opc.hasPart("/word/header1.xml")).toBe(false);
-    expect(doc.opc.hasPart("/word/header2.xml")).toBe(false);
+    expect(hasPart(doc.opc, "/word/header1.xml")).toBe(false);
+    expect(hasPart(doc.opc, "/word/header2.xml")).toBe(false);
   });
 
   it("survives save+reopen", () => {

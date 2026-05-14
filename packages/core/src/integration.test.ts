@@ -1,3 +1,4 @@
+import { getPart, hasPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx, MARGINS_NORMAL, PAGE_SIZE_A4 } from "./index.js";
 
@@ -102,12 +103,12 @@ describe("kitchen sink — every Docx feature in one document", () => {
     expect(reopened.paragraphs.length).toBeGreaterThan(5);
     expect(reopened.tables).toHaveLength(1);
     expect(reopened.tables[0]?.rows).toHaveLength(3);
-    expect(reopened.opc.hasPart("/word/styles.xml")).toBe(true);
-    expect(reopened.opc.hasPart("/word/numbering.xml")).toBe(true);
-    expect(reopened.opc.hasPart("/word/comments.xml")).toBe(true);
-    expect(reopened.opc.hasPart("/word/header1.xml")).toBe(true);
-    expect(reopened.opc.hasPart("/word/footer1.xml")).toBe(true);
-    expect(reopened.opc.hasPart("/word/media/image1.png")).toBe(true);
+    expect(hasPart(reopened.opc, "/word/styles.xml")).toBe(true);
+    expect(hasPart(reopened.opc, "/word/numbering.xml")).toBe(true);
+    expect(hasPart(reopened.opc, "/word/comments.xml")).toBe(true);
+    expect(hasPart(reopened.opc, "/word/header1.xml")).toBe(true);
+    expect(hasPart(reopened.opc, "/word/footer1.xml")).toBe(true);
+    expect(hasPart(reopened.opc, "/word/media/image1.png")).toBe(true);
     expect(
       reopened.stylesPart?.styles.some((s) =>
         s.attrs.some((a) => a.name.local === "styleId" && a.value === "MyHeading"),
@@ -121,7 +122,7 @@ describe("kitchen sink — every Docx feature in one document", () => {
     expect(reopened.text).toContain("Board");
     // Template placeholders inside header/footer parts are not part of
     // document.xml's flat text — verify them by sniffing the header bytes.
-    const headerPart = reopened.opc.getPart("/word/header1.xml");
+    const headerPart = getPart(reopened.opc, "/word/header1.xml");
     expect(new TextDecoder().decode(headerPart?.data ?? new Uint8Array())).toContain("{{company}}");
   });
 

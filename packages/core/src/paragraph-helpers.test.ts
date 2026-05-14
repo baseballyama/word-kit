@@ -1,3 +1,4 @@
+import { getPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import {
   appendTextRun,
@@ -16,7 +17,7 @@ describe("paragraph helpers", () => {
     expect(para.children.length).toBe(3);
     const bytes = doc.toUint8Array();
     const reopened = Docx.open(bytes);
-    const part = reopened.opc.getPart("/word/document.xml");
+    const part = getPart(reopened.opc, "/word/document.xml");
     const xml = new TextDecoder().decode(part?.data ?? new Uint8Array());
     expect(xml).toContain('w:val="1F497D"');
     expect(xml).toContain("<w:b/>");
@@ -29,7 +30,7 @@ describe("paragraph helpers", () => {
     const para = doc.appendParagraph("centered");
     setParagraphAlignment(para, "center");
     const xml = new TextDecoder().decode(
-      Docx.open(doc.toUint8Array()).opc.getPart("/word/document.xml")?.data ?? new Uint8Array(),
+      getPart(Docx.open(doc.toUint8Array()).opc, "/word/document.xml")?.data ?? new Uint8Array(),
     );
     expect(xml).toContain('<w:jc w:val="center"/>');
   });
@@ -40,7 +41,7 @@ describe("paragraph helpers", () => {
     setParagraphIndent(para, { left: 720, firstLine: 360 });
     setParagraphSpacing(para, { before: 240, after: 240, line: 360, lineRule: "auto" });
     const xml = new TextDecoder().decode(
-      Docx.open(doc.toUint8Array()).opc.getPart("/word/document.xml")?.data ?? new Uint8Array(),
+      getPart(Docx.open(doc.toUint8Array()).opc, "/word/document.xml")?.data ?? new Uint8Array(),
     );
     expect(xml).toContain('w:left="720"');
     expect(xml).toContain('w:firstLine="360"');

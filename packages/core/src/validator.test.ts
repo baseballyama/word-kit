@@ -1,3 +1,4 @@
+import { removePart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -29,7 +30,7 @@ describe("Docx.validate", () => {
       heightEmu: 1000,
       contentType: "image/png",
     });
-    doc.opc.removePart("/word/media/image1.png");
+    removePart(doc.opc, "/word/media/image1.png");
     const issues = doc.validate();
     expect(issues.some((i) => i.code === "rel-target-missing" || i.code === "image-missing")).toBe(
       true,

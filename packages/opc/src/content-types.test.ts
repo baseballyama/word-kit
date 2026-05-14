@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { ContentTypesIndex } from "./content-types.js";
+import {
+  emptyContentTypes,
+  parseContentTypesXml,
+  removeContentTypeDefault,
+  removeContentTypeOverride,
+  resolveContentType,
+  serializeContentTypesXml,
+  setContentTypeDefault,
+  setContentTypeOverride,
+} from "./content-types.js";
 
 const SAMPLE_XML = [
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
@@ -10,42 +19,43 @@ const SAMPLE_XML = [
   "</Types>",
 ].join("");
 
-describe("ContentTypesIndex", () => {
+describe("content types index", () => {
   it("parses Default and Override entries in order", () => {
-    const idx = ContentTypesIndex.fromXml(SAMPLE_XML);
-    expect(idx.allDefaults.map((d) => d.extension)).toEqual(["rels", "xml"]);
-    expect(idx.allOverrides.map((o) => o.partName)).toEqual(["/word/document.xml"]);
+    const idx = parseContentTypesXml(SAMPLE_XML);
+    expect(idx.defaults.map((d) => d.extension)).toEqual(["rels", "xml"]);
+    expect(idx.overrides.map((o) => o.partName)).toEqual(["/word/document.xml"]);
   });
 
   it("resolves Overrides before Defaults", () => {
-    const idx = ContentTypesIndex.fromXml(SAMPLE_XML);
-    expect(idx.resolve("/word/document.xml")).toContain("wordprocessingml.document.main+xml");
-    expect(idx.resolve("/foo.xml")).toBe("application/xml");
-    expect(idx.resolve("/no-such-extension.unknown")).toBeUndefined();
+    const idx = parseContentTypesXml(SAMPLE_XML);
+    expect(resolveContentType(idx, "/word/document.xml")).toContain(
+      "wordprocessingml.document.main+xml",
+    );
+    expect(resolveContentType(idx, "/foo.xml")).toBe("application/xml");
+    expect(resolveContentType(idx, "/no-such-extension.unknown")).toBeUndefined();
   });
 
   it("treats Override part names case-insensitively", () => {
-    const idx = ContentTypesIndex.fromXml(SAMPLE_XML);
-    expect(idx.resolve("/WORD/DOCUMENT.XML")).toContain("wordprocessingml");
+    const idx = parseContentTypesXml(SAMPLE_XML);
+    expect(resolveContentType(idx, "/WORD/DOCUMENT.XML")).toContain("wordprocessingml");
   });
 
   it("round-trips through XML", () => {
-    const idx = ContentTypesIndex.fromXml(SAMPLE_XML);
-    const out = idx.toXml();
-    const idx2 = ContentTypesIndex.fromXml(out);
-    expect(idx2.allDefaults).toEqual(idx.allDefaults);
-    expect(idx2.allOverrides).toEqual(idx.allOverrides);
+    const idx = parseContentTypesXml(SAMPLE_XML);
+    const idx2 = parseContentTypesXml(serializeContentTypesXml(idx));
+    expect(idx2.defaults).toEqual(idx.defaults);
+    expect(idx2.overrides).toEqual(idx.overrides);
   });
 
   it("supports setDefault / setOverride / remove*", () => {
-    const idx = ContentTypesIndex.empty();
-    idx.setDefault("xml", "application/xml");
-    idx.setOverride("/word/document.xml", "application/x-test+xml");
-    expect(idx.resolve("/foo.xml")).toBe("application/xml");
-    expect(idx.resolve("/word/document.xml")).toBe("application/x-test+xml");
-    expect(idx.removeOverride("/word/document.xml")).toBe(true);
-    expect(idx.resolve("/word/document.xml")).toBe("application/xml");
-    expect(idx.removeDefault("xml")).toBe(true);
-    expect(idx.resolve("/foo.xml")).toBeUndefined();
+    const idx = emptyContentTypes();
+    setContentTypeDefault(idx, "xml", "application/xml");
+    setContentTypeOverride(idx, "/word/document.xml", "application/x-test+xml");
+    expect(resolveContentType(idx, "/foo.xml")).toBe("application/xml");
+    expect(resolveContentType(idx, "/word/document.xml")).toBe("application/x-test+xml");
+    expect(removeContentTypeOverride(idx, "/word/document.xml")).toBe(true);
+    expect(resolveContentType(idx, "/word/document.xml")).toBe("application/xml");
+    expect(removeContentTypeDefault(idx, "xml")).toBe(true);
+    expect(resolveContentType(idx, "/foo.xml")).toBeUndefined();
   });
 });

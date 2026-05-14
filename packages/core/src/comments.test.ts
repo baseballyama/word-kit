@@ -1,3 +1,4 @@
+import { hasPart, partRelationships, relationshipsByType } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -13,7 +14,7 @@ describe("Docx.addComment", () => {
       text: "Please double-check this.",
     });
     expect(id).toBe(0);
-    expect(doc.opc.hasPart("/word/comments.xml")).toBe(true);
+    expect(hasPart(doc.opc, "/word/comments.xml")).toBe(true);
     const cp = doc.commentsPart;
     expect(cp).toBeDefined();
     expect(cp?.comments).toHaveLength(1);
@@ -37,8 +38,9 @@ describe("Docx.addComment", () => {
     const para = doc.paragraphs[0];
     if (!para) return;
     doc.addComment(para, { author: "R", text: "x" });
-    const rels = doc.opc.partRelationships("/word/document.xml");
-    const commentRels = rels.byType(
+    const rels = partRelationships(doc.opc, "/word/document.xml");
+    const commentRels = relationshipsByType(
+      rels,
       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments",
     );
     expect(commentRels).toHaveLength(1);

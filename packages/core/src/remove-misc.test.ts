@@ -1,3 +1,4 @@
+import { hasPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -17,7 +18,7 @@ describe("Docx.removeAllImages", () => {
     expect(doc.images).toHaveLength(2);
     expect(doc.removeAllImages()).toBe(2);
     expect(doc.images).toHaveLength(0);
-    expect(doc.opc.hasPart("/word/media/image1.png")).toBe(false);
+    expect(hasPart(doc.opc, "/word/media/image1.png")).toBe(false);
   });
 
   it("returns 0 when there are no images", () => {

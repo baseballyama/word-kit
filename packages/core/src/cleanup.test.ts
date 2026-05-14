@@ -1,3 +1,4 @@
+import { getPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import {
   Docx,
@@ -14,7 +15,7 @@ describe("Docx.appendSectionBreak", () => {
     doc.appendParagraph("section two");
     const bytes = doc.toUint8Array();
     const reopened = Docx.open(bytes);
-    const part = reopened.opc.getPart("/word/document.xml");
+    const part = getPart(reopened.opc, "/word/document.xml");
     const xml = new TextDecoder().decode(part?.data ?? new Uint8Array());
     expect(xml).toContain('<w:type w:val="nextPage"/>');
   });
@@ -26,7 +27,7 @@ describe("Docx.appendSectionBreak", () => {
     });
     doc.appendParagraph("landscape section");
     const xml = new TextDecoder().decode(
-      Docx.open(doc.toUint8Array()).opc.getPart("/word/document.xml")?.data ?? new Uint8Array(),
+      getPart(Docx.open(doc.toUint8Array()).opc, "/word/document.xml")?.data ?? new Uint8Array(),
     );
     expect(xml).toContain('w:orient="landscape"');
   });
@@ -48,7 +49,7 @@ describe("Docx.insertParagraphAt", () => {
   it("preserves styling options", () => {
     const doc = Docx.create({ paragraphs: ["A"] });
     doc.insertParagraphAt(0, "Heading", { style: "Heading1" });
-    const part = doc.opc.getPart("/word/document.xml");
+    const part = getPart(doc.opc, "/word/document.xml");
     // forces a flush before reading via the AST
     doc.toUint8Array();
     expect(doc.paragraphs[0]?.pPr?.children.length).toBeGreaterThan(0);
@@ -90,7 +91,7 @@ describe("Docx.removeAllComments", () => {
     // No more rangeStart/rangeEnd or commentReference in the paragraph.
     const bytes = doc.toUint8Array();
     const xml = new TextDecoder().decode(
-      Docx.open(bytes).opc.getPart("/word/document.xml")?.data ?? new Uint8Array(),
+      getPart(Docx.open(bytes).opc, "/word/document.xml")?.data ?? new Uint8Array(),
     );
     expect(xml).not.toContain("commentRangeStart");
     expect(xml).not.toContain("commentReference");

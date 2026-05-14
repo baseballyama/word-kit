@@ -1,3 +1,4 @@
+import { getPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import {
   appendTableRow,
@@ -30,7 +31,7 @@ describe("table cell helpers", () => {
     const part = doc.toUint8Array();
     const reopened = Docx.open(part);
     const xml = new TextDecoder().decode(
-      reopened.opc.getPart("/word/document.xml")?.data ?? new Uint8Array(),
+      getPart(reopened.opc, "/word/document.xml")?.data ?? new Uint8Array(),
     );
     expect(xml).toContain("<w:b/>");
     expect(xml).toContain('w:val="FF0000"');

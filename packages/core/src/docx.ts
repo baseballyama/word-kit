@@ -1,11 +1,25 @@
 import { parseXml, serializeXml } from "@word-kit/ooxml-xml";
 import {
+  addPart,
+  addRelationship,
+  allRelationships,
   buildMinimalDocx,
   CONTENT_TYPES_PART_NAME,
+  getPart,
+  hasPart,
+  listParts,
   normalizePartName,
-  OpcPackage,
+  type OpcPackage,
+  packageRelationships,
+  partRelationships,
   type Part,
+  readOpcPackage,
   type RelationshipSet,
+  relationshipsByType,
+  removePart,
+  removeRelationship,
+  setContentTypeDefault,
+  writeOpcPackage,
 } from "@word-kit/opc";
 import {
   acceptAllRevisions,
@@ -183,7 +197,7 @@ export class Docx {
 
   /** Parse an existing `.docx` package. */
   static open(bytes: Uint8Array): Docx {
-    const pkg = OpcPackage.read(bytes);
+    const pkg = readOpcPackage(bytes);
     const part = findMainDocumentPart(pkg);
     if (!part) {
       throw new Error("Package has no main WordprocessingML document part");
@@ -311,7 +325,7 @@ export class Docx {
    */
   get images(): Array<{ partName: string; contentType: string; data: Uint8Array }> {
     const out: Array<{ partName: string; contentType: string; data: Uint8Array }> = [];
-    for (const part of this.pkg.listParts()) {
+    for (const part of listParts(this.pkg)) {
       if (part.name.startsWith("/word/media/")) {
         out.push({ partName: part.name, contentType: part.contentType, data: part.data });
       }
@@ -327,7 +341,7 @@ export class Docx {
    * Returns `true` if the part was found and updated, `false` otherwise.
    */
   replaceImage(partName: string, newBytes: Uint8Array): boolean {
-    const part = this.pkg.getPart(partName);
+    const part = getPart(this.pkg, partName);
     if (!part) return false;
     part.data = newBytes;
     return true;
@@ -337,11 +351,11 @@ export class Docx {
     relType: string,
   ): Array<{ partName: string; relId: string; text: string }> {
     const out: Array<{ partName: string; relId: string; text: string }> = [];
-    const docRels = this.pkg.partRelationships(this.partName);
-    for (const rel of docRels.byType(relType)) {
+    const docRels = partRelationships(this.pkg, this.partName);
+    for (const rel of relationshipsByType(docRels, relType)) {
       if (rel.targetMode === "External") continue;
       const partName = this.resolvePartTarget(rel.target);
-      const part = this.pkg.getPart(partName);
+      const part = getPart(this.pkg, partName);
       if (!part) continue;
       const xml = new TextDecoder("utf-8").decode(part.data);
       const xmlDoc = parseXml(xml);
@@ -354,19 +368,19 @@ export class Docx {
   /** Create a fresh `.docx`. */
   static create(options: DocxCreateOptions = {}): Docx {
     const pkg = buildMinimalDocx();
-    const docPart = pkg.getPart(DOCUMENT_PART_FALLBACK);
+    const docPart = getPart(pkg, DOCUMENT_PART_FALLBACK);
     if (!docPart) {
       throw new Error("Minimal docx is missing /word/document.xml");
     }
     // Seed a minimal but valid styles.xml so the produced docx opens cleanly
     // in both Word and LibreOffice without an "uses an unknown style" prompt.
-    pkg.addPart({
+    addPart(pkg, {
       name: STYLES_PART_NAME,
       contentType: WML_CONTENT_TYPES.styles,
       data: new TextEncoder().encode(MINIMAL_STYLES_XML),
     });
-    const docRels = pkg.partRelationships(DOCUMENT_PART_FALLBACK);
-    docRels.add({ type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
+    const docRels = partRelationships(pkg, DOCUMENT_PART_FALLBACK);
+    addRelationship(docRels, { type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
 
     const xml = new TextDecoder("utf-8").decode(docPart.data);
     const wml = parseWmlDocument(parseXml(xml));
@@ -408,7 +422,7 @@ export class Docx {
    */
   get stylesPart(): WmlStylesPart | undefined {
     if (this.stylesCache) return this.stylesCache;
-    const part = this.pkg.getPart(STYLES_PART_NAME);
+    const part = getPart(this.pkg, STYLES_PART_NAME);
     if (!part) return undefined;
     const xml = new TextDecoder("utf-8").decode(part.data);
     this.stylesCache = parseStylesPart(parseXml(xml));
@@ -438,7 +452,7 @@ export class Docx {
    */
   get numberingPart(): WmlNumberingPart | undefined {
     if (this.numberingCache) return this.numberingCache;
-    const part = this.pkg.getPart(NUMBERING_PART_NAME);
+    const part = getPart(this.pkg, NUMBERING_PART_NAME);
     if (!part) return undefined;
     const xml = new TextDecoder("utf-8").decode(part.data);
     this.numberingCache = parseNumberingPart(parseXml(xml));
@@ -564,17 +578,17 @@ export class Docx {
   private ensureNumberingPart(): WmlNumberingPart {
     const existing = this.numberingPart;
     if (existing) return existing;
-    this.pkg.addPart({
+    addPart(this.pkg, {
       name: NUMBERING_PART_NAME,
       contentType: WML_CONTENT_TYPES.numbering,
       data: new TextEncoder().encode(EMPTY_NUMBERING_XML),
     });
-    const docRels = this.pkg.partRelationships(this.partName);
-    if (docRels.byType(WML_RELATIONSHIPS.numbering).length === 0) {
-      docRels.add({ type: WML_RELATIONSHIPS.numbering, target: "numbering.xml" });
+    const docRels = partRelationships(this.pkg, this.partName);
+    if (relationshipsByType(docRels, WML_RELATIONSHIPS.numbering).length === 0) {
+      addRelationship(docRels, { type: WML_RELATIONSHIPS.numbering, target: "numbering.xml" });
     }
     const xml = new TextDecoder("utf-8").decode(
-      this.pkg.getPart(NUMBERING_PART_NAME)?.data ?? new Uint8Array(),
+      getPart(this.pkg, NUMBERING_PART_NAME)?.data ?? new Uint8Array(),
     );
     this.numberingCache = parseNumberingPart(parseXml(xml));
     this.numberingDirty = true;
@@ -584,18 +598,18 @@ export class Docx {
   private ensureStylesPart(): WmlStylesPart {
     const existing = this.stylesPart;
     if (existing) return existing;
-    this.pkg.addPart({
+    addPart(this.pkg, {
       name: STYLES_PART_NAME,
       contentType: WML_CONTENT_TYPES.styles,
       data: new TextEncoder().encode(MINIMAL_STYLES_XML),
     });
-    const docRels = this.pkg.partRelationships(this.partName);
-    const hasStylesRel = docRels.byType(WML_RELATIONSHIPS.styles).length > 0;
+    const docRels = partRelationships(this.pkg, this.partName);
+    const hasStylesRel = relationshipsByType(docRels, WML_RELATIONSHIPS.styles).length > 0;
     if (!hasStylesRel) {
-      docRels.add({ type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
+      addRelationship(docRels, { type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
     }
     const xml = new TextDecoder("utf-8").decode(
-      this.pkg.getPart(STYLES_PART_NAME)?.data ?? new Uint8Array(),
+      getPart(this.pkg, STYLES_PART_NAME)?.data ?? new Uint8Array(),
     );
     this.stylesCache = parseStylesPart(parseXml(xml));
     this.stylesDirty = true;
@@ -652,8 +666,8 @@ export class Docx {
       this.endnotesDirty = false;
       this.endnotesCache = undefined;
     }
-    const docRels = this.pkg.partRelationships(this.partName);
-    for (const rel of docRels.all) {
+    const docRels = partRelationships(this.pkg, this.partName);
+    for (const rel of allRelationships(docRels)) {
       if (rel.targetMode === "External") continue;
       if (
         rel.type !== WML_RELATIONSHIPS.header &&
@@ -664,7 +678,7 @@ export class Docx {
       )
         continue;
       const partName = this.resolvePartTarget(rel.target);
-      const part = this.pkg.getPart(partName);
+      const part = getPart(this.pkg, partName);
       if (!part) continue;
       const xml = new TextDecoder("utf-8").decode(part.data);
       const xmlDoc = parseXml(xml);
@@ -739,8 +753,8 @@ export class Docx {
     let total = this.replaceText(query, replacement);
 
     const partsToVisit = new Set<string>();
-    const docRels = this.pkg.partRelationships(this.partName);
-    for (const rel of docRels.all) {
+    const docRels = partRelationships(this.pkg, this.partName);
+    for (const rel of allRelationships(docRels)) {
       if (rel.targetMode === "External") continue;
       if (
         rel.type === WML_RELATIONSHIPS.header ||
@@ -770,7 +784,7 @@ export class Docx {
     query: string | RegExp,
     replacement: string | ((match: TextMatch) => string),
   ): number {
-    const part = this.pkg.getPart(partName);
+    const part = getPart(this.pkg, partName);
     if (!part) return 0;
     const xmlText = new TextDecoder("utf-8").decode(part.data);
     const xmlDoc = parseXml(xmlText);
@@ -924,12 +938,12 @@ export class Docx {
    * the number of media parts removed.
    */
   removeAllImages(): number {
-    const docRels = this.pkg.partRelationships(this.partName);
+    const docRels = partRelationships(this.pkg, this.partName);
     let removed = 0;
-    for (const rel of docRels.byType(WML_RELATIONSHIPS.image)) {
+    for (const rel of relationshipsByType(docRels, WML_RELATIONSHIPS.image)) {
       const partName = this.resolvePartTarget(rel.target);
-      if (rel.targetMode !== "External" && this.pkg.removePart(partName)) removed++;
-      docRels.remove(rel.id);
+      if (rel.targetMode !== "External" && removePart(this.pkg, partName)) removed++;
+      removeRelationship(docRels, rel.id);
     }
     const hasDrawing = (el: XmlElement): boolean => {
       if (el.name.uri === WML_NS && el.name.local === "drawing") return true;
@@ -1056,11 +1070,11 @@ export class Docx {
 
   private removeAllHeaderFooterParts(relType: string, refLocal: string): number {
     let removed = 0;
-    const docRels = this.pkg.partRelationships(this.partName);
-    for (const rel of docRels.byType(relType)) {
+    const docRels = partRelationships(this.pkg, this.partName);
+    for (const rel of relationshipsByType(docRels, relType)) {
       const partName = this.resolvePartTarget(rel.target);
-      if (this.pkg.removePart(partName)) removed++;
-      docRels.remove(rel.id);
+      if (removePart(this.pkg, partName)) removed++;
+      removeRelationship(docRels, rel.id);
     }
     // Strip *Reference children from the body's sectPr in place.
     const sectPr = this.docModel.body.sectPr;
@@ -1250,8 +1264,8 @@ export class Docx {
    * styled run inside `<w:hyperlink>`.
    */
   addHyperlink(url: string, text: string, options: { tooltip?: string } = {}): WmlParagraph {
-    const docRels = this.pkg.partRelationships(this.partName);
-    const rel = docRels.add({
+    const docRels = partRelationships(this.pkg, this.partName);
+    const rel = addRelationship(docRels, {
       type: WML_RELATIONSHIPS.hyperlink,
       target: url,
       targetMode: "External",
@@ -1490,11 +1504,11 @@ export class Docx {
     }
     const ext = extensionForImageContentType(contentType);
     const partName = this.allocateImagePartName(ext);
-    this.pkg.addPart({ name: partName, contentType, data: bytes });
-    this.pkg.contentTypes.setDefault(ext, contentType);
+    addPart(this.pkg, { name: partName, contentType, data: bytes });
+    setContentTypeDefault(this.pkg.contentTypes, ext, contentType);
 
     const docRels = this.documentRelationships();
-    const rel = docRels.add({
+    const rel = addRelationship(docRels, {
       type: WML_RELATIONSHIPS.image,
       target: this.relativeMediaTarget(partName),
     });
@@ -1514,14 +1528,14 @@ export class Docx {
   }
 
   private documentRelationships(): RelationshipSet {
-    const set = this.pkg.partRelationships(this.partName);
+    const set = partRelationships(this.pkg, this.partName);
     return set;
   }
 
   private allocateImagePartName(extension: string): string {
     let n = 1;
     // Find lowest unused index.
-    while (this.pkg.hasPart(`/word/media/image${n}.${extension}`)) {
+    while (hasPart(this.pkg, `/word/media/image${n}.${extension}`)) {
       n++;
     }
     return `/word/media/image${n}.${extension}`;
@@ -1538,7 +1552,7 @@ export class Docx {
     // docPr ids must be unique across the document. We bump a counter that
     // starts from the current max we can see in pass-through drawing nodes
     // and from the relationships set length as a coarse upper bound.
-    return Math.max(1, this.documentRelationships().all.length + 1);
+    return Math.max(1, allRelationships(this.documentRelationships()).length + 1);
   }
 
   /**
@@ -1615,7 +1629,7 @@ export class Docx {
    * part is absent.
    */
   get coreProperties(): DocumentCoreProperties {
-    const part = this.pkg.getPart(CORE_PROPERTIES_PART_NAME);
+    const part = getPart(this.pkg, CORE_PROPERTIES_PART_NAME);
     if (!part) return {};
     const xml = new TextDecoder("utf-8").decode(part.data);
     return parseCoreProperties(parseXml(xml));
@@ -1627,7 +1641,7 @@ export class Docx {
    * Returns an empty record if the part is absent.
    */
   get appProperties(): DocumentAppProperties {
-    const part = this.pkg.getPart(APP_PROPERTIES_PART_NAME);
+    const part = getPart(this.pkg, APP_PROPERTIES_PART_NAME);
     if (!part) return {};
     const xml = new TextDecoder("utf-8").decode(part.data);
     return parseAppProperties(parseXml(xml));
@@ -1639,21 +1653,21 @@ export class Docx {
    * merge into existing properties.
    */
   setAppProperties(props: DocumentAppProperties): void {
-    if (!this.pkg.hasPart(APP_PROPERTIES_PART_NAME)) {
-      this.pkg.addPart({
+    if (!hasPart(this.pkg, APP_PROPERTIES_PART_NAME)) {
+      addPart(this.pkg, {
         name: APP_PROPERTIES_PART_NAME,
         contentType: APP_PROPERTIES_CONTENT_TYPE,
         data: new TextEncoder().encode(EMPTY_APP_PROPERTIES_XML),
       });
-      const pkgRels = this.pkg.packageRelationships;
-      if (pkgRels.byType(APP_PROPERTIES_REL_TYPE).length === 0) {
-        pkgRels.add({ type: APP_PROPERTIES_REL_TYPE, target: "docProps/app.xml" });
+      const pkgRels = packageRelationships(this.pkg);
+      if (relationshipsByType(pkgRels, APP_PROPERTIES_REL_TYPE).length === 0) {
+        addRelationship(pkgRels, { type: APP_PROPERTIES_REL_TYPE, target: "docProps/app.xml" });
       }
     }
     const existing = this.appProperties;
     const merged: DocumentAppProperties = { ...existing, ...props };
     const xml = serializeXml(writeAppProperties(merged));
-    const part = this.pkg.getPart(APP_PROPERTIES_PART_NAME);
+    const part = getPart(this.pkg, APP_PROPERTIES_PART_NAME);
     if (part) part.data = new TextEncoder().encode(xml);
   }
 
@@ -1663,28 +1677,28 @@ export class Docx {
    * Subsequent calls merge into existing properties.
    */
   setCoreProperties(props: DocumentCoreProperties): void {
-    if (!this.pkg.hasPart(CORE_PROPERTIES_PART_NAME)) {
-      this.pkg.addPart({
+    if (!hasPart(this.pkg, CORE_PROPERTIES_PART_NAME)) {
+      addPart(this.pkg, {
         name: CORE_PROPERTIES_PART_NAME,
         contentType: CORE_PROPERTIES_CONTENT_TYPE,
         data: new TextEncoder().encode(EMPTY_CORE_PROPERTIES_XML),
       });
-      const pkgRels = this.pkg.packageRelationships;
-      if (pkgRels.byType(CORE_PROPERTIES_REL_TYPE).length === 0) {
-        pkgRels.add({ type: CORE_PROPERTIES_REL_TYPE, target: "docProps/core.xml" });
+      const pkgRels = packageRelationships(this.pkg);
+      if (relationshipsByType(pkgRels, CORE_PROPERTIES_REL_TYPE).length === 0) {
+        addRelationship(pkgRels, { type: CORE_PROPERTIES_REL_TYPE, target: "docProps/core.xml" });
       }
     }
     const existing = this.coreProperties;
     const merged: DocumentCoreProperties = { ...existing, ...props };
     const xml = serializeXml(writeCoreProperties(merged));
-    const part = this.pkg.getPart(CORE_PROPERTIES_PART_NAME);
+    const part = getPart(this.pkg, CORE_PROPERTIES_PART_NAME);
     if (part) part.data = new TextEncoder().encode(xml);
   }
 
   /** Parsed `word/footnotes.xml` AST, or `undefined` if absent. */
   get footnotesPart(): WmlFootnotesPart | undefined {
     if (this.footnotesCache) return this.footnotesCache;
-    const part = this.pkg.getPart(FOOTNOTES_PART_NAME);
+    const part = getPart(this.pkg, FOOTNOTES_PART_NAME);
     if (!part) return undefined;
     const xml = new TextDecoder("utf-8").decode(part.data);
     this.footnotesCache = parseFootnotesPart(parseXml(xml));
@@ -1694,7 +1708,7 @@ export class Docx {
   /** Parsed `word/endnotes.xml` AST, or `undefined` if absent. */
   get endnotesPart(): WmlFootnotesPart | undefined {
     if (this.endnotesCache) return this.endnotesCache;
-    const part = this.pkg.getPart(ENDNOTES_PART_NAME);
+    const part = getPart(this.pkg, ENDNOTES_PART_NAME);
     if (!part) return undefined;
     const xml = new TextDecoder("utf-8").decode(part.data);
     this.endnotesCache = parseFootnotesPart(parseXml(xml));
@@ -1750,17 +1764,17 @@ export class Docx {
   private ensureFootnotesPart(): WmlFootnotesPart {
     const existing = this.footnotesPart;
     if (existing) return existing;
-    this.pkg.addPart({
+    addPart(this.pkg, {
       name: FOOTNOTES_PART_NAME,
       contentType: WML_CONTENT_TYPES.footnotes,
       data: new TextEncoder().encode(SEED_FOOTNOTES_XML),
     });
-    const docRels = this.pkg.partRelationships(this.partName);
-    if (docRels.byType(WML_RELATIONSHIPS.footnotes).length === 0) {
-      docRels.add({ type: WML_RELATIONSHIPS.footnotes, target: "footnotes.xml" });
+    const docRels = partRelationships(this.pkg, this.partName);
+    if (relationshipsByType(docRels, WML_RELATIONSHIPS.footnotes).length === 0) {
+      addRelationship(docRels, { type: WML_RELATIONSHIPS.footnotes, target: "footnotes.xml" });
     }
     const xml = new TextDecoder("utf-8").decode(
-      this.pkg.getPart(FOOTNOTES_PART_NAME)?.data ?? new Uint8Array(),
+      getPart(this.pkg, FOOTNOTES_PART_NAME)?.data ?? new Uint8Array(),
     );
     this.footnotesCache = parseFootnotesPart(parseXml(xml));
     this.footnotesDirty = true;
@@ -1770,17 +1784,17 @@ export class Docx {
   private ensureEndnotesPart(): WmlFootnotesPart {
     const existing = this.endnotesPart;
     if (existing) return existing;
-    this.pkg.addPart({
+    addPart(this.pkg, {
       name: ENDNOTES_PART_NAME,
       contentType: WML_CONTENT_TYPES.endnotes,
       data: new TextEncoder().encode(SEED_ENDNOTES_XML),
     });
-    const docRels = this.pkg.partRelationships(this.partName);
-    if (docRels.byType(WML_RELATIONSHIPS.endnotes).length === 0) {
-      docRels.add({ type: WML_RELATIONSHIPS.endnotes, target: "endnotes.xml" });
+    const docRels = partRelationships(this.pkg, this.partName);
+    if (relationshipsByType(docRels, WML_RELATIONSHIPS.endnotes).length === 0) {
+      addRelationship(docRels, { type: WML_RELATIONSHIPS.endnotes, target: "endnotes.xml" });
     }
     const xml = new TextDecoder("utf-8").decode(
-      this.pkg.getPart(ENDNOTES_PART_NAME)?.data ?? new Uint8Array(),
+      getPart(this.pkg, ENDNOTES_PART_NAME)?.data ?? new Uint8Array(),
     );
     this.endnotesCache = parseFootnotesPart(parseXml(xml));
     this.endnotesDirty = true;
@@ -1790,7 +1804,7 @@ export class Docx {
   /** Parsed `word/comments.xml` AST, or `undefined` if absent. */
   get commentsPart(): WmlCommentsPart | undefined {
     if (this.commentsCache) return this.commentsCache;
-    const part = this.pkg.getPart(COMMENTS_PART_NAME);
+    const part = getPart(this.pkg, COMMENTS_PART_NAME);
     if (!part) return undefined;
     const xml = new TextDecoder("utf-8").decode(part.data);
     this.commentsCache = parseCommentsPart(parseXml(xml));
@@ -1841,17 +1855,17 @@ export class Docx {
   private ensureCommentsPart(): WmlCommentsPart {
     const existing = this.commentsPart;
     if (existing) return existing;
-    this.pkg.addPart({
+    addPart(this.pkg, {
       name: COMMENTS_PART_NAME,
       contentType: WML_CONTENT_TYPES.comments,
       data: new TextEncoder().encode(EMPTY_COMMENTS_XML),
     });
-    const docRels = this.pkg.partRelationships(this.partName);
-    if (docRels.byType(WML_RELATIONSHIPS.comments).length === 0) {
-      docRels.add({ type: WML_RELATIONSHIPS.comments, target: "comments.xml" });
+    const docRels = partRelationships(this.pkg, this.partName);
+    if (relationshipsByType(docRels, WML_RELATIONSHIPS.comments).length === 0) {
+      addRelationship(docRels, { type: WML_RELATIONSHIPS.comments, target: "comments.xml" });
     }
     const xml = new TextDecoder("utf-8").decode(
-      this.pkg.getPart(COMMENTS_PART_NAME)?.data ?? new Uint8Array(),
+      getPart(this.pkg, COMMENTS_PART_NAME)?.data ?? new Uint8Array(),
     );
     this.commentsCache = parseCommentsPart(parseXml(xml));
     this.commentsDirty = true;
@@ -1867,13 +1881,13 @@ export class Docx {
   addHeader(text: string, type: HeaderFooterType = "default"): string {
     const partName = this.allocateHeaderPartName();
     const xml = buildHeaderXml(text);
-    this.pkg.addPart({
+    addPart(this.pkg, {
       name: partName,
       contentType: WML_CONTENT_TYPES.header,
       data: new TextEncoder().encode(xml),
     });
-    const docRels = this.pkg.partRelationships(this.partName);
-    const rel = docRels.add({
+    const docRels = partRelationships(this.pkg, this.partName);
+    const rel = addRelationship(docRels, {
       type: WML_RELATIONSHIPS.header,
       target: this.targetRelativeToDoc(partName),
     });
@@ -1891,13 +1905,13 @@ export class Docx {
   addPageNumberFooter(prefix = "", suffix = "", type: HeaderFooterType = "default"): string {
     const partName = this.allocateFooterPartName();
     const xml = buildPageNumberFooterXml(prefix, suffix);
-    this.pkg.addPart({
+    addPart(this.pkg, {
       name: partName,
       contentType: WML_CONTENT_TYPES.footer,
       data: new TextEncoder().encode(xml),
     });
-    const docRels = this.pkg.partRelationships(this.partName);
-    const rel = docRels.add({
+    const docRels = partRelationships(this.pkg, this.partName);
+    const rel = addRelationship(docRels, {
       type: WML_RELATIONSHIPS.footer,
       target: this.targetRelativeToDoc(partName),
     });
@@ -1923,13 +1937,13 @@ export class Docx {
   addFooter(text: string, type: HeaderFooterType = "default"): string {
     const partName = this.allocateFooterPartName();
     const xml = buildFooterXml(text);
-    this.pkg.addPart({
+    addPart(this.pkg, {
       name: partName,
       contentType: WML_CONTENT_TYPES.footer,
       data: new TextEncoder().encode(xml),
     });
-    const docRels = this.pkg.partRelationships(this.partName);
-    const rel = docRels.add({
+    const docRels = partRelationships(this.pkg, this.partName);
+    const rel = addRelationship(docRels, {
       type: WML_RELATIONSHIPS.footer,
       target: this.targetRelativeToDoc(partName),
     });
@@ -2016,13 +2030,13 @@ export class Docx {
 
   private allocateHeaderPartName(): string {
     let n = 1;
-    while (this.pkg.hasPart(`/word/header${n}.xml`)) n++;
+    while (hasPart(this.pkg, `/word/header${n}.xml`)) n++;
     return `/word/header${n}.xml`;
   }
 
   private allocateFooterPartName(): string {
     let n = 1;
-    while (this.pkg.hasPart(`/word/footer${n}.xml`)) n++;
+    while (hasPart(this.pkg, `/word/footer${n}.xml`)) n++;
     return `/word/footer${n}.xml`;
   }
 
@@ -2161,7 +2175,7 @@ export class Docx {
       this.flushNotes(this.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
       this.endnotesDirty = false;
     }
-    return this.pkg.write();
+    return writeOpcPackage(this.pkg);
   }
 
   private flushNotes(
@@ -2171,7 +2185,7 @@ export class Docx {
   ): void {
     const xmlDoc = writeFootnotesPart(part, rootLocal);
     const xmlText = serializeXml(xmlDoc);
-    const xmlPart = this.pkg.getPart(partName);
+    const xmlPart = getPart(this.pkg, partName);
     if (!xmlPart) return;
     xmlPart.data = new TextEncoder().encode(xmlText);
   }
@@ -2179,7 +2193,7 @@ export class Docx {
   private flushComments(part: WmlCommentsPart): void {
     const xmlDoc = writeCommentsPart(part);
     const xmlText = serializeXml(xmlDoc);
-    const commentsPart = this.pkg.getPart(COMMENTS_PART_NAME);
+    const commentsPart = getPart(this.pkg, COMMENTS_PART_NAME);
     if (!commentsPart) return;
     commentsPart.data = new TextEncoder().encode(xmlText);
   }
@@ -2187,7 +2201,7 @@ export class Docx {
   private flushNumbering(part: WmlNumberingPart): void {
     const xmlDoc = writeNumberingPart(part);
     const xmlText = serializeXml(xmlDoc);
-    const numberingPart = this.pkg.getPart(NUMBERING_PART_NAME);
+    const numberingPart = getPart(this.pkg, NUMBERING_PART_NAME);
     if (!numberingPart) return;
     numberingPart.data = new TextEncoder().encode(xmlText);
   }
@@ -2195,7 +2209,7 @@ export class Docx {
   private flushDocument(): void {
     const xmlDoc = writeWmlDocument(this.docModel);
     const xmlText = serializeXml(xmlDoc);
-    const part = this.pkg.getPart(this.partName);
+    const part = getPart(this.pkg, this.partName);
     if (!part) {
       throw new Error(`Lost document part: ${this.partName}`);
     }
@@ -2205,7 +2219,7 @@ export class Docx {
   private flushStyles(stylesPart: WmlStylesPart): void {
     const xmlDoc = writeStylesPart(stylesPart);
     const xmlText = serializeXml(xmlDoc);
-    const part = this.pkg.getPart(STYLES_PART_NAME);
+    const part = getPart(this.pkg, STYLES_PART_NAME);
     if (!part) return;
     part.data = new TextEncoder().encode(xmlText);
   }
@@ -2223,14 +2237,17 @@ function wmlEmptyEl(local: string) {
 }
 
 function findMainDocumentPart(pkg: OpcPackage): Part | undefined {
-  for (const rel of pkg.packageRelationships.byType(WML_RELATIONSHIPS.officeDocument)) {
+  for (const rel of relationshipsByType(
+    packageRelationships(pkg),
+    WML_RELATIONSHIPS.officeDocument,
+  )) {
     if (rel.targetMode !== "Internal") continue;
     const partName = normalizePartName(rel.target.startsWith("/") ? rel.target : `/${rel.target}`);
     if (partName === CONTENT_TYPES_PART_NAME) continue;
-    const part = pkg.getPart(partName);
+    const part = getPart(pkg, partName);
     if (part) return part;
   }
-  return pkg.getPart(DOCUMENT_PART_FALLBACK);
+  return getPart(pkg, DOCUMENT_PART_FALLBACK);
 }
 
 function documentTextOfParagraph(p: WmlParagraph): string {

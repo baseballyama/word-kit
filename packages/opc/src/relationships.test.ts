@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { RelationshipSet } from "./relationships.js";
+import {
+  addRelationship,
+  allRelationships,
+  parseRelationshipsXml,
+  relationshipById,
+  relationshipsByType,
+  removeRelationship,
+  serializeRelationshipsXml,
+} from "./relationships.js";
 
 const SAMPLE_XML = [
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
@@ -10,30 +18,33 @@ const SAMPLE_XML = [
   "</Relationships>",
 ].join("");
 
-describe("RelationshipSet", () => {
+describe("relationship set", () => {
   it("parses Id/Type/Target/TargetMode preserving order", () => {
-    const set = RelationshipSet.fromXml(SAMPLE_XML);
-    expect(set.all.map((r) => r.id)).toEqual(["rId1", "rId2", "rId3"]);
-    expect(set.byId("rId3")?.targetMode).toBe("External");
-    expect(set.byId("rId1")?.targetMode).toBe("Internal");
+    const set = parseRelationshipsXml(SAMPLE_XML);
+    expect(allRelationships(set).map((r) => r.id)).toEqual(["rId1", "rId2", "rId3"]);
+    expect(relationshipById(set, "rId3")?.targetMode).toBe("External");
+    expect(relationshipById(set, "rId1")?.targetMode).toBe("Internal");
   });
 
   it("filters by type", () => {
-    const set = RelationshipSet.fromXml(SAMPLE_XML);
+    const set = parseRelationshipsXml(SAMPLE_XML);
     expect(
-      set.byType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"),
+      relationshipsByType(
+        set,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+      ),
     ).toHaveLength(1);
   });
 
   it("round-trips through XML", () => {
-    const set = RelationshipSet.fromXml(SAMPLE_XML);
-    const reparsed = RelationshipSet.fromXml(set.toXml());
-    expect(reparsed.all).toEqual(set.all);
+    const set = parseRelationshipsXml(SAMPLE_XML);
+    const reparsed = parseRelationshipsXml(serializeRelationshipsXml(set));
+    expect(allRelationships(reparsed)).toEqual(allRelationships(set));
   });
 
   it("allocates the next free rId on add", () => {
-    const set = RelationshipSet.fromXml(SAMPLE_XML);
-    const r = set.add({
+    const set = parseRelationshipsXml(SAMPLE_XML);
+    const r = addRelationship(set, {
       type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
       target: "styles.xml",
     });
@@ -42,14 +53,16 @@ describe("RelationshipSet", () => {
   });
 
   it("rejects duplicate ids", () => {
-    const set = RelationshipSet.fromXml(SAMPLE_XML);
-    expect(() => set.add({ id: "rId1", type: "x", target: "y" })).toThrow(/already in use/);
+    const set = parseRelationshipsXml(SAMPLE_XML);
+    expect(() => addRelationship(set, { id: "rId1", type: "x", target: "y" })).toThrow(
+      /already in use/,
+    );
   });
 
-  it("remove() returns true and updates membership", () => {
-    const set = RelationshipSet.fromXml(SAMPLE_XML);
-    expect(set.remove("rId2")).toBe(true);
-    expect(set.byId("rId2")).toBeUndefined();
-    expect(set.all).toHaveLength(2);
+  it("removeRelationship returns true and updates membership", () => {
+    const set = parseRelationshipsXml(SAMPLE_XML);
+    expect(removeRelationship(set, "rId2")).toBe(true);
+    expect(relationshipById(set, "rId2")).toBeUndefined();
+    expect(allRelationships(set)).toHaveLength(2);
   });
 });

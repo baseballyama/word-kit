@@ -1,3 +1,4 @@
+import { getPart, partRelationships, relationshipsByType } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -6,8 +7,9 @@ describe("Docx.addHyperlink", () => {
     const doc = Docx.create({ paragraphs: [] });
     doc.addHyperlink("https://example.com/", "Visit example");
     expect(doc.paragraphs).toHaveLength(1);
-    const rels = doc.opc.partRelationships("/word/document.xml");
-    const linkRels = rels.byType(
+    const rels = partRelationships(doc.opc, "/word/document.xml");
+    const linkRels = relationshipsByType(
+      rels,
       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
     );
     expect(linkRels).toHaveLength(1);
@@ -19,11 +21,14 @@ describe("Docx.addHyperlink", () => {
     const doc = Docx.create({ paragraphs: [] });
     doc.addHyperlink("https://example.com/", "Click");
     const reopened = Docx.open(doc.toUint8Array());
-    const rels = reopened.opc.partRelationships("/word/document.xml");
+    const rels = partRelationships(reopened.opc, "/word/document.xml");
     expect(
-      rels.byType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"),
+      relationshipsByType(
+        rels,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+      ),
     ).toHaveLength(1);
-    const part = reopened.opc.getPart("/word/document.xml");
+    const part = getPart(reopened.opc, "/word/document.xml");
     const xml = new TextDecoder().decode(part?.data ?? new Uint8Array());
     expect(xml).toContain("Click");
   });
@@ -32,7 +37,7 @@ describe("Docx.addHyperlink", () => {
     const doc = Docx.create({ paragraphs: [] });
     doc.addHyperlink("https://example.com/", "x", { tooltip: "Hello" });
     const reopened = Docx.open(doc.toUint8Array());
-    const part = reopened.opc.getPart("/word/document.xml");
+    const part = getPart(reopened.opc, "/word/document.xml");
     const xml = new TextDecoder().decode(part?.data ?? new Uint8Array());
     expect(xml).toContain('w:tooltip="Hello"');
   });

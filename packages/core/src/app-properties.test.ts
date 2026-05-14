@@ -1,3 +1,4 @@
+import { hasPart, packageRelationships, relationshipsByType } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -17,8 +18,9 @@ describe("Docx app properties", () => {
       characters: 7800,
       company: "Acme",
     });
-    expect(doc.opc.hasPart("/docProps/app.xml")).toBe(true);
-    const rels = doc.opc.packageRelationships.byType(
+    expect(hasPart(doc.opc, "/docProps/app.xml")).toBe(true);
+    const rels = relationshipsByType(
+      packageRelationships(doc.opc),
       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties",
     );
     expect(rels).toHaveLength(1);

@@ -6,13 +6,48 @@
 
 export {
   CONTENT_TYPES_PART_NAME,
-  ContentTypesIndex,
+  type ContentTypesIndex,
+  createContentTypes,
   type DefaultEntry,
+  emptyContentTypes,
   type OverrideEntry,
+  parseContentTypesXml,
+  removeContentTypeDefault,
+  removeContentTypeOverride,
+  resolveContentType,
+  serializeContentTypesXml,
+  setContentTypeDefault,
+  setContentTypeOverride,
 } from "./content-types.js";
 export { buildMinimalDocx } from "./minimal-docx.js";
-export { OpcPackage, type OpcWriteOptions } from "./package.js";
-export { RelationshipSet } from "./relationships.js";
+export {
+  addPart,
+  allRelationshipSources,
+  emptyOpcPackage,
+  getPart,
+  hasPart,
+  listParts,
+  type OpcPackage,
+  type OpcWriteOptions,
+  packageRelationships,
+  partRelationships,
+  partsSize,
+  readOpcPackage,
+  removePart,
+  writeOpcPackage,
+} from "./package.js";
+export {
+  addRelationship,
+  allRelationships,
+  createRelationshipSet,
+  emptyRelationshipSet,
+  parseRelationshipsXml,
+  relationshipById,
+  relationshipsByType,
+  type RelationshipSet,
+  removeRelationship,
+  serializeRelationshipsXml,
+} from "./relationships.js";
 export type {
   ContentType,
   Part,

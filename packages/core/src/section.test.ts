@@ -1,3 +1,4 @@
+import { getPart, hasPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 import { MARGINS_NORMAL, PAGE_SIZE_A4 } from "./index.js";
@@ -7,7 +8,7 @@ describe("Docx.addHeader / addFooter", () => {
     const doc = Docx.create({ paragraphs: [] });
     const relId = doc.addHeader("Document header");
     expect(relId).toMatch(/^rId\d+$/);
-    expect(doc.opc.hasPart("/word/header1.xml")).toBe(true);
+    expect(hasPart(doc.opc, "/word/header1.xml")).toBe(true);
     expect(doc.document.body.sectPr).toBeDefined();
     const sectPr = doc.document.body.sectPr;
     expect(
@@ -18,7 +19,7 @@ describe("Docx.addHeader / addFooter", () => {
   it("creates a footer part the same way", () => {
     const doc = Docx.create({ paragraphs: [] });
     doc.addFooter("Document footer");
-    expect(doc.opc.hasPart("/word/footer1.xml")).toBe(true);
+    expect(hasPart(doc.opc, "/word/footer1.xml")).toBe(true);
     const sectPr = doc.document.body.sectPr;
     expect(
       sectPr?.children.some((c) => c.kind === "element" && c.name.local === "footerReference"),
@@ -30,7 +31,7 @@ describe("Docx.addHeader / addFooter", () => {
     doc.addHeader("Top of page");
     const bytes = doc.toUint8Array();
     const reopened = Docx.open(bytes);
-    const headerPart = reopened.opc.getPart("/word/header1.xml");
+    const headerPart = getPart(reopened.opc, "/word/header1.xml");
     expect(headerPart).toBeDefined();
     const headerXml = new TextDecoder().decode(headerPart?.data ?? new Uint8Array());
     expect(headerXml).toContain("Top of page");
@@ -40,8 +41,8 @@ describe("Docx.addHeader / addFooter", () => {
     const doc = Docx.create({ paragraphs: [] });
     doc.addHeader("h1", "default");
     doc.addHeader("h2", "first");
-    expect(doc.opc.hasPart("/word/header1.xml")).toBe(true);
-    expect(doc.opc.hasPart("/word/header2.xml")).toBe(true);
+    expect(hasPart(doc.opc, "/word/header1.xml")).toBe(true);
+    expect(hasPart(doc.opc, "/word/header2.xml")).toBe(true);
   });
 });
 

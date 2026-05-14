@@ -1,3 +1,4 @@
+import { getPart, writeOpcPackage } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
 import { Docx } from "./docx.js";
 
@@ -24,10 +25,10 @@ function buildDocWithRevisions(): Docx {
   // Embed into a real package by overwriting Docx.create's document.xml
   // with our crafted XML, then re-opening.
   const seed = Docx.create({ paragraphs: [] });
-  const docPart = seed.opc.getPart("/word/document.xml");
+  const docPart = getPart(seed.opc, "/word/document.xml");
   if (!docPart) throw new Error("no document part");
   docPart.data = new TextEncoder().encode(xml);
-  const bytes = seed.opc.write();
+  const bytes = writeOpcPackage(seed.opc);
   return Docx.open(bytes);
 }
 

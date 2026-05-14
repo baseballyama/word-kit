@@ -434,6 +434,119 @@ export class Docx {
   }
 
   /**
+   * Append a paragraph whose only content is a page break. Equivalent to
+   * Ctrl+Enter in Word.
+   */
+  appendPageBreak(): WmlParagraph {
+    const piece: WmlRunPiece = { kind: "break", breakType: "page" };
+    const run: WmlRun = { kind: "run", pieces: [piece], extras: [] };
+    const paragraph: WmlParagraph = { kind: "paragraph", children: [run], extras: [] };
+    this.docModel.body.blocks.push(paragraph);
+    this.dirty = true;
+    return paragraph;
+  }
+
+  /**
+   * Add a named bookmark covering a paragraph. Returns the assigned numeric
+   * bookmark id; the same name must not be reused without removing the
+   * existing bookmark first (Word will deduplicate silently otherwise).
+   */
+  addBookmark(name: string, paragraph: WmlParagraph): number {
+    const id = this.allocateBookmarkId();
+    const start: XmlElement = {
+      kind: "element",
+      name: { uri: WML_NS, local: "bookmarkStart", prefix: "w" },
+      attrs: [
+        {
+          name: { uri: WML_NS, local: "id", prefix: "w" },
+          value: String(id),
+          isNamespaceDecl: false,
+        },
+        { name: { uri: WML_NS, local: "name", prefix: "w" }, value: name, isNamespaceDecl: false },
+      ],
+      children: [],
+      xmlSpace: "default",
+      selfClosing: true,
+    };
+    const end: XmlElement = {
+      kind: "element",
+      name: { uri: WML_NS, local: "bookmarkEnd", prefix: "w" },
+      attrs: [
+        {
+          name: { uri: WML_NS, local: "id", prefix: "w" },
+          value: String(id),
+          isNamespaceDecl: false,
+        },
+      ],
+      children: [],
+      xmlSpace: "default",
+      selfClosing: true,
+    };
+    paragraph.children = [
+      { kind: "raw", node: start },
+      ...paragraph.children,
+      { kind: "raw", node: end },
+    ];
+    this.dirty = true;
+    return id;
+  }
+
+  /**
+   * Append a paragraph with a hyperlink that points at an internal bookmark.
+   */
+  addInternalHyperlink(
+    bookmarkName: string,
+    text: string,
+    options: { tooltip?: string } = {},
+  ): WmlParagraph {
+    const hyperlinkEl = buildHyperlink({
+      anchor: bookmarkName,
+      runs: [buildHyperlinkRun(text)],
+      ...(options.tooltip !== undefined ? { tooltip: options.tooltip } : {}),
+    });
+    const paragraph: WmlParagraph = {
+      kind: "paragraph",
+      children: [{ kind: "raw", node: hyperlinkEl }],
+      extras: [],
+    };
+    this.docModel.body.blocks.push(paragraph);
+    this.dirty = true;
+    return paragraph;
+  }
+
+  private allocateBookmarkId(): number {
+    // Bookmarks are numbered uniquely per document; we scan existing IDs to
+    // avoid colliding with anything in the document.
+    let max = -1;
+    const scan = (el: XmlElement): void => {
+      if (
+        el.name.uri === WML_NS &&
+        (el.name.local === "bookmarkStart" || el.name.local === "bookmarkEnd")
+      ) {
+        const idAttr = el.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id");
+        if (idAttr) {
+          const n = Number.parseInt(idAttr.value, 10);
+          if (Number.isFinite(n) && n > max) max = n;
+        }
+      }
+      for (const c of el.children) {
+        if (c.kind === "element") scan(c);
+      }
+    };
+    // Walk all inline nodes in body to find existing bookmark ids.
+    for (const block of this.docModel.body.blocks) {
+      if (block.kind === "paragraph") {
+        for (const child of block.children) {
+          if (child.kind === "raw") scan(child.node);
+        }
+      } else if (block.kind === "raw") {
+        scan(block.node);
+      }
+    }
+    return max + 1;
+  }
+
+  /**
    * Append a paragraph containing a single external hyperlink. Creates an
    * external relationship (TargetMode=External) for the URL and wraps a
    * styled run inside `<w:hyperlink>`.

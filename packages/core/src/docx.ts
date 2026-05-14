@@ -8,6 +8,7 @@ import {
   type RelationshipSet,
 } from "@word-kit/opc";
 import {
+  acceptAllRevisions,
   addSectPrFooterRef,
   addSectPrHeaderRef,
   buildAbstractNum,
@@ -43,6 +44,7 @@ import {
   parseNumberingPart,
   parseStylesPart,
   parseWmlDocument,
+  rejectAllRevisions,
   replaceText,
   setSectPrPageMargins,
   setSectPrPageSize,
@@ -414,6 +416,28 @@ export class Docx {
   /** Visible text of the document. Paragraphs are joined with `\n`. */
   get text(): string {
     return documentText(this.docModel);
+  }
+
+  /**
+   * Accept every `<w:ins>` and `<w:del>` revision in the document.
+   * Insertions are kept and unwrapped; deletions are dropped. Returns the
+   * number of revisions resolved.
+   */
+  acceptAllRevisions(): number {
+    const n = acceptAllRevisions(this.docModel);
+    if (n > 0) this.dirty = true;
+    return n;
+  }
+
+  /**
+   * Reject every `<w:ins>` and `<w:del>` revision in the document.
+   * Insertions are dropped; deletions are kept and unwrapped. Returns the
+   * number of revisions resolved.
+   */
+  rejectAllRevisions(): number {
+    const n = rejectAllRevisions(this.docModel);
+    if (n > 0) this.dirty = true;
+    return n;
   }
 
   /** Append a paragraph containing a single text run to the body. */

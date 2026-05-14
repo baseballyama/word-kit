@@ -93,6 +93,7 @@ export {
   type WmlStyleType,
   writeStylesPart,
 } from "./styles.js";
+export { acceptAllRevisions, rejectAllRevisions } from "./revisions.js";
 export {
   documentText,
   findInParagraph,

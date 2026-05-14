@@ -1,0 +1,24 @@
+[submodule "references/jszip"]
+	path = references/jszip
+	url = https://github.com/Stuk/jszip.git
+[submodule "references/dolanmiu-docx"]
+	path = references/dolanmiu-docx
+	url = https://github.com/dolanmiu/docx.git
+[submodule "references/officegen"]
+	path = references/officegen
+	url = https://github.com/Ziv-Barber/officegen.git
+[submodule "references/Open-XML-SDK"]
+	path = references/Open-XML-SDK
+	url = https://github.com/dotnet/Open-XML-SDK.git
+[submodule "references/python-docx"]
+	path = references/python-docx
+	url = https://github.com/python-openxml/python-docx.git
+[submodule "references/docxtemplater"]
+	path = references/docxtemplater
+	url = https://github.com/open-xml-templating/docxtemplater.git
+[submodule "references/mammoth.js"]
+	path = references/mammoth.js
+	url = https://github.com/mwilliamson/mammoth.js.git
+[submodule "references/docx-preview"]
+	path = references/docx-preview
+	url = https://github.com/VolodymyrBaydalka/docxjs.git

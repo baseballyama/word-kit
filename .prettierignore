@@ -1,0 +1,9 @@
+# Used by oxfmt as an additional ignore source (alongside .gitignore).
+# These are not files we own or want to reformat.
+references/
+docs/specs/ecma-376/
+docs/specs/xsd/
+**/dist/
+**/coverage/
+**/node_modules/
+pnpm-lock.yaml

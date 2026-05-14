@@ -919,6 +919,44 @@ export class Docx {
   }
 
   /**
+   * Remove every header part and its references from the body's sectPr.
+   * Returns the number of header parts removed.
+   */
+  removeAllHeaders(): number {
+    return this.removeAllHeaderFooterParts(WML_RELATIONSHIPS.header, "headerReference");
+  }
+
+  /** Same shape as {@link removeAllHeaders} but for footer parts. */
+  removeAllFooters(): number {
+    return this.removeAllHeaderFooterParts(WML_RELATIONSHIPS.footer, "footerReference");
+  }
+
+  private removeAllHeaderFooterParts(relType: string, refLocal: string): number {
+    let removed = 0;
+    const docRels = this.pkg.partRelationships(this.partName);
+    for (const rel of docRels.byType(relType)) {
+      const partName = this.resolvePartTarget(rel.target);
+      if (this.pkg.removePart(partName)) removed++;
+      docRels.remove(rel.id);
+    }
+    // Strip *Reference children from the body's sectPr in place.
+    const sectPr = this.docModel.body.sectPr;
+    if (sectPr) {
+      const arr = sectPr.children as XmlElement[];
+      let writeIdx = 0;
+      for (let i = 0; i < arr.length; i++) {
+        const c = arr[i];
+        if (!c) continue;
+        if (c.kind === "element" && c.name.uri === WML_NS && c.name.local === refLocal) continue;
+        arr[writeIdx++] = c;
+      }
+      arr.length = writeIdx;
+    }
+    if (removed > 0) this.dirty = true;
+    return removed;
+  }
+
+  /**
    * Remove every comment from `comments.xml` AND every comment range
    * marker and reference run from `document.xml`. Returns the number of
    * comments removed.

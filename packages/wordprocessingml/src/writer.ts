@@ -140,7 +140,12 @@ function tableCellToElement(cell: WmlTableCell): XmlElement {
   };
 }
 
-function paragraphToElement(p: WmlParagraph): XmlElement {
+/**
+ * Convert a {@link WmlParagraph} back into a `<w:p>` XML element. Useful
+ * when paragraphs live outside the main document body (e.g. inside
+ * `<w:hdr>`/`<w:ftr>` or a `<w:footnote>`).
+ */
+export function paragraphToElement(p: WmlParagraph): XmlElement {
   const recognized: XmlNode[] = [];
   if (p.pPr) recognized.push(p.pPr);
   for (const inline of p.children) {

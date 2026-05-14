@@ -73,7 +73,12 @@ function parseBody(body: XmlElement): WmlBody {
   };
 }
 
-function parseParagraph(p: XmlElement): WmlParagraph {
+/**
+ * Parse a `<w:p>` element into a structured paragraph. Useful for processing
+ * paragraphs that appear outside the main document body — for example
+ * inside `<w:hdr>`, `<w:ftr>`, `<w:comment>`, or `<w:footnote>`.
+ */
+export function parseParagraph(p: XmlElement): WmlParagraph {
   let pPr: XmlElement | undefined;
   const children: WmlInline[] = [];
   const extras: PassThrough[] = [];

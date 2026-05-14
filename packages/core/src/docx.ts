@@ -46,7 +46,10 @@ import {
   MINIMAL_STYLES_XML,
   numAbstractRef,
   numId as readNumId,
+  paragraphToElement,
   parseCommentsPart,
+  parseParagraph,
+  replaceInParagraph,
   type PageMargins,
   PAGE_SIZE_LETTER,
   type PageSize,
@@ -76,7 +79,7 @@ import {
   writeStylesPart,
   writeWmlDocument,
 } from "@word-kit/wml";
-import type { XmlElement } from "@word-kit/ooxml-xml";
+import type { XmlElement, XmlNode } from "@word-kit/ooxml-xml";
 
 const DOCUMENT_PART_FALLBACK = "/word/document.xml";
 
@@ -425,6 +428,100 @@ export class Docx {
   ): number {
     const count = replaceText(this.docModel, query, replacement);
     if (count > 0) this.dirty = true;
+    return count;
+  }
+
+  /**
+   * Replace text everywhere it can appear inside the package: body, all
+   * headers, footers, footnotes, endnotes and comment bodies. Returns the
+   * total count of replacements across every part.
+   *
+   * Run-spanning matches are handled within each `<w:p>` individually
+   * (matches that span across paragraphs are not supported).
+   */
+  replaceTextEverywhere(
+    query: string | RegExp,
+    replacement: string | ((match: TextMatch) => string),
+  ): number {
+    // Flush any dirty in-memory parts to package bytes so the XML walk sees
+    // the latest state. We invalidate the caches afterwards so the next
+    // accessor reloads fresh.
+    if (this.commentsDirty && this.commentsCache) {
+      this.flushComments(this.commentsCache);
+      this.commentsDirty = false;
+      this.commentsCache = undefined;
+    }
+    if (this.footnotesDirty && this.footnotesCache) {
+      this.flushNotes(this.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
+      this.footnotesDirty = false;
+      this.footnotesCache = undefined;
+    }
+    if (this.endnotesDirty && this.endnotesCache) {
+      this.flushNotes(this.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
+      this.endnotesDirty = false;
+      this.endnotesCache = undefined;
+    }
+
+    let total = this.replaceText(query, replacement);
+
+    const partsToVisit = new Set<string>();
+    const docRels = this.pkg.partRelationships(this.partName);
+    for (const rel of docRels.all) {
+      if (rel.targetMode === "External") continue;
+      if (
+        rel.type === WML_RELATIONSHIPS.header ||
+        rel.type === WML_RELATIONSHIPS.footer ||
+        rel.type === WML_RELATIONSHIPS.comments ||
+        rel.type === WML_RELATIONSHIPS.footnotes ||
+        rel.type === WML_RELATIONSHIPS.endnotes
+      ) {
+        partsToVisit.add(this.resolvePartTarget(rel.target));
+      }
+    }
+
+    for (const partName of partsToVisit) {
+      total += this.replaceTextInPartXml(partName, query, replacement);
+    }
+    return total;
+  }
+
+  private resolvePartTarget(relTarget: string): string {
+    if (relTarget.startsWith("/")) return relTarget;
+    // Relative to /word/document.xml's folder (/word/).
+    return `/word/${relTarget}`;
+  }
+
+  private replaceTextInPartXml(
+    partName: string,
+    query: string | RegExp,
+    replacement: string | ((match: TextMatch) => string),
+  ): number {
+    const part = this.pkg.getPart(partName);
+    if (!part) return 0;
+    const xmlText = new TextDecoder("utf-8").decode(part.data);
+    const xmlDoc = parseXml(xmlText);
+    let count = 0;
+    const visit = (el: XmlElement): void => {
+      const children = el.children as XmlNode[];
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (!child || child.kind !== "element") continue;
+        if (child.name.uri === WML_NS && child.name.local === "p") {
+          const para = parseParagraph(child);
+          const n = replaceInParagraph(para, query, replacement);
+          if (n > 0) {
+            children[i] = paragraphToElement(para);
+            count += n;
+          }
+        } else {
+          visit(child);
+        }
+      }
+    };
+    visit(xmlDoc.root);
+    if (count > 0) {
+      part.data = new TextEncoder().encode(serializeXml(xmlDoc));
+    }
     return count;
   }
 

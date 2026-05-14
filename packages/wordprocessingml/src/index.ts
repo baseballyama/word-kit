@@ -68,7 +68,7 @@ export {
   EMPTY_NUMBERING_XML,
   type NumberFormat,
 } from "./numbering-builders.js";
-export { parseWmlDocument } from "./parser.js";
+export { parseParagraph, parseWmlDocument } from "./parser.js";
 export {
   addSectPrFooterRef,
   addSectPrHeaderRef,
@@ -129,4 +129,4 @@ export type {
   WmlTableCell,
   WmlTableRow,
 } from "./types.js";
-export { writeWmlDocument } from "./writer.js";
+export { paragraphToElement, writeWmlDocument } from "./writer.js";

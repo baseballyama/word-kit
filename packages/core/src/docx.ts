@@ -1282,6 +1282,30 @@ export function appendPageBreak(doc: Docx): WmlParagraph {
 }
 
 /**
+ * Append a `<w:br>` to an existing paragraph as a soft break.
+ *
+ * `kind`:
+ * - `"line"` (default) — soft line break (Shift+Enter in Word).
+ * - `"page"` — page break inside the paragraph; Word splits the page
+ *   here without inserting a new paragraph above.
+ * - `"column"` — column break (only meaningful in multi-column sections).
+ */
+export function appendLineBreak(
+  doc: Docx,
+  paragraph: WmlParagraph,
+  kind: "line" | "page" | "column" = "line",
+): WmlRun {
+  const piece: WmlRunPiece =
+    kind === "line"
+      ? { kind: "break" }
+      : { kind: "break", breakType: kind === "page" ? "page" : "column" };
+  const run: WmlRun = { kind: "run", pieces: [piece], extras: [] };
+  paragraph.children.push(run);
+  doc.dirty = true;
+  return run;
+}
+
+/**
  * Add a named bookmark covering a paragraph. Returns the assigned numeric
  * bookmark id; the same name must not be reused without removing the
  * existing bookmark first (Word will deduplicate silently otherwise).

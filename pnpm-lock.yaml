@@ -36,6 +36,8 @@ importers:
         specifier: workspace:*
         version: link:../opc
 
+  packages/ooxml-xml: {}
+
   packages/opc:
     dependencies:
       fflate:

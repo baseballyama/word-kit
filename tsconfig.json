@@ -4,5 +4,9 @@
     "noEmit": true
   },
   "include": [],
-  "references": [{ "path": "./packages/core" }, { "path": "./packages/opc" }]
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/opc" },
+    { "path": "./packages/ooxml-xml" }
+  ]
 }

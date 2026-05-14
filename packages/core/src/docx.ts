@@ -8,16 +8,25 @@ import {
   type RelationshipSet,
 } from "@word-kit/opc";
 import {
+  buildAbstractNum,
   buildInlineDrawing,
+  buildNum,
+  buildPPrWithNumPr,
   type BuildStyleOptions,
   buildStyle,
   buildTextTable,
   type BuildTableOptions,
+  bulletAbstractNumLevels,
+  decimalAbstractNumLevels,
   documentText,
+  EMPTY_NUMBERING_XML,
   extensionForImageContentType,
   findStyle,
   findText,
   MINIMAL_STYLES_XML,
+  numAbstractRef,
+  numId as readNumId,
+  parseNumberingPart,
   parseStylesPart,
   parseWmlDocument,
   replaceText,
@@ -28,11 +37,13 @@ import {
   WML_RELATIONSHIPS,
   type WmlBlock,
   type WmlDocument,
+  type WmlNumberingPart,
   type WmlParagraph,
   type WmlRun,
   type WmlRunPiece,
   type WmlStylesPart,
   type WmlTable,
+  writeNumberingPart,
   writeStylesPart,
   writeWmlDocument,
 } from "@word-kit/wml";
@@ -82,6 +93,10 @@ export interface AppendParagraphOptions {
  * and {@link document} accessors when callers need fine-grained control.
  */
 const STYLES_PART_NAME = "/word/styles.xml";
+const NUMBERING_PART_NAME = "/word/numbering.xml";
+
+const BULLET_ABSTRACT_NUM_ID = 9000;
+const DECIMAL_ABSTRACT_NUM_ID = 9001;
 
 export class Docx {
   private readonly pkg: OpcPackage;
@@ -90,6 +105,8 @@ export class Docx {
   private dirty = false;
   private stylesCache: WmlStylesPart | undefined;
   private stylesDirty = false;
+  private numberingCache: WmlNumberingPart | undefined;
+  private numberingDirty = false;
 
   private constructor(pkg: OpcPackage, doc: WmlDocument, partName: string) {
     this.pkg = pkg;
@@ -188,6 +205,129 @@ export class Docx {
       part.styles.push(built);
     }
     this.stylesDirty = true;
+  }
+
+  /**
+   * Parsed `word/numbering.xml` AST, or `undefined` if absent. Lazy and
+   * cached just like {@link stylesPart}.
+   */
+  get numberingPart(): WmlNumberingPart | undefined {
+    if (this.numberingCache) return this.numberingCache;
+    const part = this.pkg.getPart(NUMBERING_PART_NAME);
+    if (!part) return undefined;
+    const xml = new TextDecoder("utf-8").decode(part.data);
+    this.numberingCache = parseNumberingPart(parseXml(xml));
+    return this.numberingCache;
+  }
+
+  /**
+   * Append a bullet list (one paragraph per item) to the body. Sets up
+   * `numbering.xml` and its relationship on first use.
+   */
+  addBulletList(items: readonly string[]): WmlParagraph[] {
+    const idValue = this.ensureBulletNumbering();
+    return items.map((text) => this.appendListParagraph(text, idValue));
+  }
+
+  /**
+   * Append a numbered list (one paragraph per item) to the body. Sets up
+   * `numbering.xml` and its relationship on first use.
+   */
+  addNumberedList(items: readonly string[]): WmlParagraph[] {
+    const idValue = this.ensureDecimalNumbering();
+    return items.map((text) => this.appendListParagraph(text, idValue));
+  }
+
+  private appendListParagraph(text: string, numIdValue: number): WmlParagraph {
+    const piece: WmlRunPiece = {
+      kind: "text",
+      value: text,
+      preserveSpace: /^\s|\s$/.test(text),
+    };
+    const run: WmlRun = { kind: "run", pieces: [piece], extras: [] };
+    const paragraph: WmlParagraph = {
+      kind: "paragraph",
+      pPr: buildPPrWithNumPr(numIdValue, 0),
+      children: [run],
+      extras: [],
+    };
+    this.docModel.body.blocks.push(paragraph);
+    this.dirty = true;
+    return paragraph;
+  }
+
+  private ensureBulletNumbering(): number {
+    return this.ensureNumberingDefinition(BULLET_ABSTRACT_NUM_ID, bulletAbstractNumLevels);
+  }
+
+  private ensureDecimalNumbering(): number {
+    return this.ensureNumberingDefinition(DECIMAL_ABSTRACT_NUM_ID, decimalAbstractNumLevels);
+  }
+
+  private ensureNumberingDefinition(
+    abstractNumIdValue: number,
+    levelsFactory: () => Array<{
+      ilvl: number;
+      numFmt: "bullet" | "decimal" | string;
+      lvlText: string;
+    }>,
+  ): number {
+    const part = this.ensureNumberingPart();
+    const hasAbstract = part.abstractNums.some(
+      (a) =>
+        a.attrs.find((x) => x.name.uri === WML_NS && x.name.local === "abstractNumId")?.value ===
+        String(abstractNumIdValue),
+    );
+    if (!hasAbstract) {
+      part.abstractNums.push(
+        buildAbstractNum({
+          abstractNumId: abstractNumIdValue,
+          levels: levelsFactory() as never,
+        }),
+      );
+      this.numberingDirty = true;
+    }
+    // Find an existing num pointing to this abstractNumId; otherwise add one.
+    let chosenId: number | undefined;
+    for (const n of part.nums) {
+      if (numAbstractRef(n) === abstractNumIdValue) {
+        chosenId = readNumId(n);
+        if (chosenId !== undefined) break;
+      }
+    }
+    if (chosenId === undefined) {
+      const used = new Set<number>();
+      for (const n of part.nums) {
+        const id = readNumId(n);
+        if (id !== undefined) used.add(id);
+      }
+      let next = 1;
+      while (used.has(next)) next++;
+      part.nums.push(buildNum(next, abstractNumIdValue));
+      this.numberingDirty = true;
+      chosenId = next;
+    }
+    return chosenId;
+  }
+
+  private ensureNumberingPart(): WmlNumberingPart {
+    const existing = this.numberingPart;
+    if (existing) return existing;
+    this.pkg.addPart({
+      name: NUMBERING_PART_NAME,
+      contentType: WML_CONTENT_TYPES.numbering,
+      data: new TextEncoder().encode(EMPTY_NUMBERING_XML),
+    });
+    const docRels = this.pkg.partRelationships(this.partName);
+    if (docRels.byType(WML_RELATIONSHIPS.numbering).length === 0) {
+      docRels.add({ type: WML_RELATIONSHIPS.numbering, target: "numbering.xml" });
+    }
+    const xml = new TextDecoder("utf-8").decode(
+      this.pkg.getPart(NUMBERING_PART_NAME)?.data ?? new Uint8Array(),
+    );
+    this.numberingCache = parseNumberingPart(parseXml(xml));
+    this.numberingDirty = true;
+    return this.numberingCache;
   }
 
   private ensureStylesPart(): WmlStylesPart {
@@ -412,7 +552,19 @@ export class Docx {
       this.flushStyles(this.stylesCache);
       this.stylesDirty = false;
     }
+    if (this.numberingDirty && this.numberingCache) {
+      this.flushNumbering(this.numberingCache);
+      this.numberingDirty = false;
+    }
     return this.pkg.write();
+  }
+
+  private flushNumbering(part: WmlNumberingPart): void {
+    const xmlDoc = writeNumberingPart(part);
+    const xmlText = serializeXml(xmlDoc);
+    const numberingPart = this.pkg.getPart(NUMBERING_PART_NAME);
+    if (!numberingPart) return;
+    numberingPart.data = new TextEncoder().encode(xmlText);
   }
 
   private flushDocument(): void {

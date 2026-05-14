@@ -26,6 +26,26 @@ export {
   type InlineDrawingOptions,
   sniffImageContentType,
 } from "./drawing.js";
+export {
+  abstractNumId,
+  numAbstractRef,
+  numId,
+  parseNumberingPart,
+  type WmlNumberingPart,
+  writeNumberingPart,
+} from "./numbering.js";
+export {
+  type BuildAbstractNumLevelOptions,
+  type BuildAbstractNumOptions,
+  buildAbstractNum,
+  buildNum,
+  buildNumPr,
+  buildPPrWithNumPr,
+  bulletAbstractNumLevels,
+  decimalAbstractNumLevels,
+  EMPTY_NUMBERING_XML,
+  type NumberFormat,
+} from "./numbering-builders.js";
 export { parseWmlDocument } from "./parser.js";
 export { type BuildStyleOptions, buildStyle, MINIMAL_STYLES_XML } from "./style-builders.js";
 export {

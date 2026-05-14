@@ -919,6 +919,65 @@ export class Docx {
   }
 
   /**
+   * Remove every image part (`/word/media/*`), drop matching image
+   * relationships, and strip `<w:drawing>` runs from the body. Returns
+   * the number of media parts removed.
+   */
+  removeAllImages(): number {
+    const docRels = this.pkg.partRelationships(this.partName);
+    let removed = 0;
+    for (const rel of docRels.byType(WML_RELATIONSHIPS.image)) {
+      const partName = this.resolvePartTarget(rel.target);
+      if (rel.targetMode !== "External" && this.pkg.removePart(partName)) removed++;
+      docRels.remove(rel.id);
+    }
+    const hasDrawing = (el: XmlElement): boolean => {
+      if (el.name.uri === WML_NS && el.name.local === "drawing") return true;
+      for (const c of el.children) {
+        if (c.kind === "element" && hasDrawing(c)) return true;
+      }
+      return false;
+    };
+    const stripDrawings = (p: WmlParagraph): void => {
+      p.children = p.children.filter((child) => {
+        if (child.kind === "raw") {
+          if (child.node.name.uri === WML_NS && child.node.name.local === "drawing") return false;
+          if (child.node.name.local === "r" && hasDrawing(child.node)) return false;
+        }
+        if (child.kind === "run") {
+          child.pieces = child.pieces.filter((piece) => piece.kind !== "drawing");
+        }
+        return true;
+      });
+    };
+    const walk = (blocks: WmlBlock[]): void => {
+      for (const b of blocks) {
+        if (b.kind === "paragraph") stripDrawings(b);
+        else if (b.kind === "table") {
+          for (const row of b.rows) {
+            for (const cell of row.cells) {
+              for (const p of cell.paragraphs) stripDrawings(p);
+            }
+          }
+        }
+      }
+    };
+    walk(this.docModel.body.blocks);
+    if (removed > 0) this.dirty = true;
+    return removed;
+  }
+
+  /** Remove every bookmark from the body. Returns the count removed. */
+  removeAllBookmarks(): number {
+    const names = this.bookmarks.map((b) => b.name);
+    let removed = 0;
+    for (const name of names) {
+      if (this.removeBookmark(name)) removed++;
+    }
+    return removed;
+  }
+
+  /**
    * Remove every header part and its references from the body's sectPr.
    * Returns the number of header parts removed.
    */

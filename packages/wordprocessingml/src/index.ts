@@ -91,6 +91,14 @@ export {
   type NumberFormat,
 } from "./numbering-builders.js";
 export {
+  APP_PROPERTIES_CONTENT_TYPE,
+  APP_PROPERTIES_REL_TYPE,
+  type DocumentAppProperties,
+  EMPTY_APP_PROPERTIES_XML,
+  parseAppProperties,
+  writeAppProperties,
+} from "./app-properties.js";
+export {
   CORE_PROPERTIES_CONTENT_TYPE,
   CORE_PROPERTIES_REL_TYPE,
   type DocumentCoreProperties,

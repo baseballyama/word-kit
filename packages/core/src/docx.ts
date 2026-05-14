@@ -11,11 +11,17 @@ import {
   acceptAllRevisions,
   addSectPrFooterRef,
   addSectPrHeaderRef,
+  APP_PROPERTIES_CONTENT_TYPE,
+  APP_PROPERTIES_REL_TYPE,
   CORE_PROPERTIES_CONTENT_TYPE,
   CORE_PROPERTIES_REL_TYPE,
+  type DocumentAppProperties,
   type DocumentCoreProperties,
+  EMPTY_APP_PROPERTIES_XML,
   EMPTY_CORE_PROPERTIES_XML,
+  parseAppProperties,
   parseCoreProperties,
+  writeAppProperties,
   writeCoreProperties,
   buildAbstractNum,
   buildComment,
@@ -141,6 +147,7 @@ const COMMENTS_PART_NAME = "/word/comments.xml";
 const FOOTNOTES_PART_NAME = "/word/footnotes.xml";
 const ENDNOTES_PART_NAME = "/word/endnotes.xml";
 const CORE_PROPERTIES_PART_NAME = "/docProps/core.xml";
+const APP_PROPERTIES_PART_NAME = "/docProps/app.xml";
 
 const BULLET_ABSTRACT_NUM_ID = 9000;
 const DECIMAL_ABSTRACT_NUM_ID = 9001;
@@ -1412,6 +1419,42 @@ export class Docx {
     if (!part) return {};
     const xml = new TextDecoder("utf-8").decode(part.data);
     return parseCoreProperties(parseXml(xml));
+  }
+
+  /**
+   * Read the package's application-level document properties (Application,
+   * AppVersion, Pages, Words, Company, Manager, …) from `docProps/app.xml`.
+   * Returns an empty record if the part is absent.
+   */
+  get appProperties(): DocumentAppProperties {
+    const part = this.pkg.getPart(APP_PROPERTIES_PART_NAME);
+    if (!part) return {};
+    const xml = new TextDecoder("utf-8").decode(part.data);
+    return parseAppProperties(parseXml(xml));
+  }
+
+  /**
+   * Write application-level document properties. Creates `docProps/app.xml`
+   * and the package-level relationship on first use; subsequent calls
+   * merge into existing properties.
+   */
+  setAppProperties(props: DocumentAppProperties): void {
+    if (!this.pkg.hasPart(APP_PROPERTIES_PART_NAME)) {
+      this.pkg.addPart({
+        name: APP_PROPERTIES_PART_NAME,
+        contentType: APP_PROPERTIES_CONTENT_TYPE,
+        data: new TextEncoder().encode(EMPTY_APP_PROPERTIES_XML),
+      });
+      const pkgRels = this.pkg.packageRelationships;
+      if (pkgRels.byType(APP_PROPERTIES_REL_TYPE).length === 0) {
+        pkgRels.add({ type: APP_PROPERTIES_REL_TYPE, target: "docProps/app.xml" });
+      }
+    }
+    const existing = this.appProperties;
+    const merged: DocumentAppProperties = { ...existing, ...props };
+    const xml = serializeXml(writeAppProperties(merged));
+    const part = this.pkg.getPart(APP_PROPERTIES_PART_NAME);
+    if (part) part.data = new TextEncoder().encode(xml);
   }
 
   /**

@@ -826,6 +826,42 @@ export class Docx {
     return paragraph;
   }
 
+  /**
+   * Insert a new text paragraph at the given paragraph-relative index.
+   * `index` counts only paragraphs (so `0` means "before the first
+   * paragraph"); other body block kinds are skipped past. If `index` is
+   * past the end of the existing paragraphs, the new paragraph is
+   * appended.
+   */
+  insertParagraphAt(
+    index: number,
+    text: string,
+    options: AppendParagraphOptions = {},
+  ): WmlParagraph {
+    let count = 0;
+    let blockInsertAt = this.docModel.body.blocks.length;
+    for (let i = 0; i < this.docModel.body.blocks.length; i++) {
+      const b = this.docModel.body.blocks[i];
+      if (b?.kind === "paragraph") {
+        if (count === index) {
+          blockInsertAt = i;
+          break;
+        }
+        count++;
+      }
+    }
+    // Build the paragraph using the same logic as appendParagraph by
+    // calling it temporarily, then moving the newly-pushed paragraph into
+    // place.
+    const para = this.appendParagraph(text, options);
+    const lastIdx = this.docModel.body.blocks.length - 1;
+    if (lastIdx !== blockInsertAt) {
+      this.docModel.body.blocks.splice(lastIdx, 1);
+      this.docModel.body.blocks.splice(blockInsertAt, 0, para);
+    }
+    return para;
+  }
+
   /** Remove the paragraph at `index` from the body. Returns true on success. */
   removeParagraph(index: number): boolean {
     let count = 0;

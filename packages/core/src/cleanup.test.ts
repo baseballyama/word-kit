@@ -32,6 +32,30 @@ describe("Docx.appendSectionBreak", () => {
   });
 });
 
+describe("Docx.insertParagraphAt", () => {
+  it("inserts a paragraph at the given paragraph-relative index", () => {
+    const doc = Docx.create({ paragraphs: ["A", "B", "C"] });
+    doc.insertParagraphAt(1, "X");
+    expect(doc.text).toBe("A\nX\nB\nC");
+  });
+
+  it("appends when the index is past the end", () => {
+    const doc = Docx.create({ paragraphs: ["A"] });
+    doc.insertParagraphAt(99, "Y");
+    expect(doc.text).toBe("A\nY");
+  });
+
+  it("preserves styling options", () => {
+    const doc = Docx.create({ paragraphs: ["A"] });
+    doc.insertParagraphAt(0, "Heading", { style: "Heading1" });
+    const part = doc.opc.getPart("/word/document.xml");
+    // forces a flush before reading via the AST
+    doc.toUint8Array();
+    expect(doc.paragraphs[0]?.pPr?.children.length).toBeGreaterThan(0);
+    expect(part).toBeDefined();
+  });
+});
+
 describe("Docx.removeParagraph / clearBody", () => {
   it("removes the paragraph at the given index (paragraph-relative)", () => {
     const doc = Docx.create({ paragraphs: ["one", "two", "three"] });

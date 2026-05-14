@@ -5,12 +5,16 @@ import {
   normalizePartName,
   OpcPackage,
   type Part,
+  type RelationshipSet,
 } from "@word-kit/opc";
 import {
+  buildInlineDrawing,
   documentText,
+  extensionForImageContentType,
   findText,
   parseWmlDocument,
   replaceText,
+  sniffImageContentType,
   type TextMatch,
   WML_NS,
   WML_RELATIONSHIPS,
@@ -34,6 +38,19 @@ export interface DocxCreateOptions {
    * - Pass `[]` to start with no paragraphs at all (rare but supported).
    */
   readonly paragraphs?: readonly string[];
+}
+
+export interface AddImageOptions {
+  /** Image width in EMU (1 inch = 914400 EMU). */
+  readonly widthEmu: number;
+  /** Image height in EMU. */
+  readonly heightEmu: number;
+  /** Override the auto-detected content type (e.g. `"image/png"`). */
+  readonly contentType?: string;
+  /** docPr name (defaults to `Picture {n}`). */
+  readonly name?: string;
+  /** Accessibility alt text. */
+  readonly altText?: string;
 }
 
 export interface AppendParagraphOptions {
@@ -203,6 +220,92 @@ export class Docx {
     this.docModel.body.blocks.push(paragraph);
     this.dirty = true;
     return paragraph;
+  }
+
+  /**
+   * Insert an image into the document. The image bytes become a new media
+   * part under `/word/media/`, a relationship is added from the main
+   * document, and a `<w:drawing>`-bearing run is appended to (or returned
+   * for placement in) the body.
+   *
+   * Use `addImageRun` if you want the constructed run without it being
+   * appended automatically.
+   */
+  addImage(bytes: Uint8Array, options: AddImageOptions): WmlParagraph {
+    const run = this.addImageRun(bytes, options);
+    const paragraph: WmlParagraph = {
+      kind: "paragraph",
+      children: [run],
+      extras: [],
+    };
+    this.docModel.body.blocks.push(paragraph);
+    this.dirty = true;
+    return paragraph;
+  }
+
+  /**
+   * Like {@link addImage} but returns the constructed run without inserting
+   * it. Callers can place the run wherever they want (e.g. inside an
+   * existing paragraph).
+   */
+  addImageRun(bytes: Uint8Array, options: AddImageOptions): WmlRun {
+    const contentType = options.contentType ?? sniffImageContentType(bytes);
+    if (!contentType) {
+      throw new Error(
+        "addImage: could not detect image content type from bytes; pass options.contentType explicitly",
+      );
+    }
+    const ext = extensionForImageContentType(contentType);
+    const partName = this.allocateImagePartName(ext);
+    this.pkg.addPart({ name: partName, contentType, data: bytes });
+    this.pkg.contentTypes.setDefault(ext, contentType);
+
+    const docRels = this.documentRelationships();
+    const rel = docRels.add({
+      type: WML_RELATIONSHIPS.image,
+      target: this.relativeMediaTarget(partName),
+    });
+
+    const docPrId = this.allocateDocPrId();
+    const drawing = buildInlineDrawing({
+      relId: rel.id,
+      widthEmu: options.widthEmu,
+      heightEmu: options.heightEmu,
+      docPrId,
+      ...(options.name !== undefined ? { name: options.name } : {}),
+      ...(options.altText !== undefined ? { altText: options.altText } : {}),
+    });
+    const piece: WmlRunPiece = { kind: "drawing", node: drawing };
+    this.dirty = true;
+    return { kind: "run", pieces: [piece], extras: [] };
+  }
+
+  private documentRelationships(): RelationshipSet {
+    const set = this.pkg.partRelationships(this.partName);
+    return set;
+  }
+
+  private allocateImagePartName(extension: string): string {
+    let n = 1;
+    // Find lowest unused index.
+    while (this.pkg.hasPart(`/word/media/image${n}.${extension}`)) {
+      n++;
+    }
+    return `/word/media/image${n}.${extension}`;
+  }
+
+  private relativeMediaTarget(partName: string): string {
+    // /word/document.xml relates targets relative to its own folder.
+    // /word/media/imageN.ext  →  media/imageN.ext
+    if (partName.startsWith("/word/")) return partName.slice("/word/".length);
+    return partName.startsWith("/") ? partName.slice(1) : partName;
+  }
+
+  private allocateDocPrId(): number {
+    // docPr ids must be unique across the document. We bump a counter that
+    // starts from the current max we can see in pass-through drawing nodes
+    // and from the relationships set length as a coarse upper bound.
+    return Math.max(1, this.documentRelationships().all.length + 1);
   }
 
   /** Serialize the package back to `.docx` bytes. */

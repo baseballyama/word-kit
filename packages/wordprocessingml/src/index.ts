@@ -14,6 +14,12 @@ export {
   WML_NS,
   WML_RELATIONSHIPS,
 } from "./namespaces.js";
+export {
+  buildInlineDrawing,
+  extensionForImageContentType,
+  type InlineDrawingOptions,
+  sniffImageContentType,
+} from "./drawing.js";
 export { parseWmlDocument } from "./parser.js";
 export {
   documentText,

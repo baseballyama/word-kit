@@ -1335,6 +1335,74 @@ export class Docx {
   }
 
   /**
+   * Convenience access to the document title (`dc:title`). Reading returns
+   * the current value; writing replaces it via {@link setCoreProperties}.
+   */
+  get title(): string | undefined {
+    return this.coreProperties.title;
+  }
+
+  set title(value: string | undefined) {
+    if (value !== undefined) this.setCoreProperties({ title: value });
+  }
+
+  /**
+   * Convenience access to the document author / creator (`dc:creator`).
+   */
+  get author(): string | undefined {
+    return this.coreProperties.creator;
+  }
+
+  set author(value: string | undefined) {
+    if (value !== undefined) this.setCoreProperties({ creator: value });
+  }
+
+  /**
+   * Enumerate every `<w:instrText>` field instruction found in the body.
+   * Useful for inspecting what fields a template carries before deciding
+   * how to fill them.
+   */
+  get fields(): Array<{ paragraph: WmlParagraph; instruction: string }> {
+    const out: Array<{ paragraph: WmlParagraph; instruction: string }> = [];
+    const visit = (p: WmlParagraph): void => {
+      for (const child of p.children) {
+        if (child.kind === "run") {
+          for (const piece of child.pieces) {
+            if (piece.kind === "instrText") {
+              out.push({ paragraph: p, instruction: piece.value });
+            }
+          }
+        } else if (child.kind === "raw") {
+          const walk = (el: XmlElement): void => {
+            if (el.name.uri === WML_NS && el.name.local === "instrText") {
+              let acc = "";
+              for (const c of el.children) {
+                if (c.kind === "text") acc += c.value;
+                else if (c.kind === "cdata") acc += c.value;
+              }
+              out.push({ paragraph: p, instruction: acc });
+              return;
+            }
+            for (const c of el.children) if (c.kind === "element") walk(c);
+          };
+          walk(child.node);
+        }
+      }
+    };
+    for (const block of this.docModel.body.blocks) {
+      if (block.kind === "paragraph") visit(block);
+      else if (block.kind === "table") {
+        for (const row of block.rows) {
+          for (const cell of row.cells) {
+            for (const p of cell.paragraphs) visit(p);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
    * Read the package's core document properties (title, creator, subject,
    * etc.), parsed from `docProps/core.xml`. Returns an empty record if the
    * part is absent.

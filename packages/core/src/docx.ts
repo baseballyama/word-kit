@@ -463,6 +463,32 @@ export class Docx {
     return items.map((text) => this.appendListParagraph(text, idValue));
   }
 
+  /**
+   * Apply numbering to an existing paragraph (turn it into a list item).
+   * Use `numId` from one of `addBulletList` / `addNumberedList` / a value
+   * found via `docx.numberingPart`.
+   */
+  applyListToParagraph(paragraph: WmlParagraph, numId: number, ilvl = 0): void {
+    const pPr = paragraph.pPr;
+    if (!pPr) {
+      paragraph.pPr = buildPPrWithNumPr(numId, ilvl);
+    } else {
+      // Replace any existing <w:numPr> with the new one.
+      const existing = pPr.children.findIndex(
+        (c) => c.kind === "element" && c.name.local === "numPr",
+      );
+      const numPr = buildPPrWithNumPr(numId, ilvl).children.find(
+        (c) => c.kind === "element" && c.name.local === "numPr",
+      );
+      if (numPr && numPr.kind === "element") {
+        const children = pPr.children as XmlElement[];
+        if (existing >= 0) children[existing] = numPr;
+        else children.push(numPr);
+      }
+    }
+    this.dirty = true;
+  }
+
   private appendListParagraph(text: string, numIdValue: number): WmlParagraph {
     const piece: WmlRunPiece = {
       kind: "text",

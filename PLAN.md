@@ -1,32 +1,38 @@
 # word-kit 実装計画 (v1)
 
-> ステータス: **実装中**。M1-M13 完了 (機能完全度 80%+)。139 tests、すべて green、5500+ LOC、main に直接 push。
+> ステータス: **実装中**。M1-M13 + 多数の拡張完了 (機能完全度 90%+)。158 tests、すべて green、7000+ LOC、main に直接 push。
 > スコープは **`.docx` (WordprocessingML)** のみ。pptx / xlsx は Out of scope (`CLAUDE.md` 参照)。
 > OPC / DrawingML 層は **将来 pptx/xlsx へ転用可能** な形で設計するが、当面は docx を成立させることに集中する。
 
-## 進捗ステータス (2026-05-14)
+## 進捗ステータス (2026-05-15)
 
-| M   | 概要                                                          | 状態                                               |
-| --- | ------------------------------------------------------------- | -------------------------------------------------- |
-| M1  | OPC 読み書き + 完全 round-trip                                | ✅ 完了                                            |
-| M2  | XML AST コア (`@word-kit/ooxml-xml`)                          | ✅ 完了                                            |
-| M3  | WordprocessingML 最小 AST (parser + writer)                   | ✅ 完了                                            |
-| M4  | Run-spanning find/replace                                     | ✅ 完了                                            |
-| M5  | `Docx.create` / `Docx.open` / `toUint8Array`                  | ✅ 完了                                            |
-| M6  | ブロック挿入 + 段落 API                                       | ✅ 完了 (M5 に内包)                                |
-| M7  | 画像 (inline DrawingML)                                       | ✅ 完了                                            |
-| M8  | テーブル (構造化 AST)                                         | ✅ 完了                                            |
-| M9  | スタイル (`styles.xml`)                                       | ✅ 完了                                            |
-| M10 | ナンバリング (`numbering.xml`) — bullet / decimal             | ✅ 完了                                            |
-| M11 | ヘッダー / フッター / セクションプロパティ                    | ✅ 完了                                            |
-| M12 | コメント (`comments.xml` + range + reference)                 | ✅ 完了                                            |
-| M13 | tracked changes (`acceptAllRevisions` / `rejectAllRevisions`) | ✅ 完了                                            |
-|     | ハイパーリンク (external URL)                                 | ✅ 完了                                            |
-| M14 | SDT / ブックマーク / 高度なフィールド                         | ⚪️ raw pass-through で round-trip 可、API は未提供 |
-| M15 | ビルド/perf/docs 最終化                                       | ⚪️ 未着手                                          |
-| M16 | 1.0.0 リリース                                                | ⚪️ 未着手                                          |
+| M   | 概要                                                                        | 状態                                               |
+| --- | --------------------------------------------------------------------------- | -------------------------------------------------- |
+| M1  | OPC 読み書き + 完全 round-trip                                              | ✅ 完了                                            |
+| M2  | XML AST コア (`@word-kit/ooxml-xml`)                                        | ✅ 完了                                            |
+| M3  | WordprocessingML 最小 AST (parser + writer)                                 | ✅ 完了                                            |
+| M4  | Run-spanning find/replace                                                   | ✅ 完了                                            |
+| M5  | `Docx.create` / `Docx.open` / `toUint8Array` / `toBlob`                     | ✅ 完了                                            |
+| M6  | ブロック挿入 + 段落 API (`appendParagraph`, `appendPageBreak`)              | ✅ 完了                                            |
+| M7  | 画像 (inline DrawingML, `addImage` / `addImageRun`)                         | ✅ 完了                                            |
+| M8  | テーブル (構造化 AST, `addTable`)                                           | ✅ 完了                                            |
+| M9  | スタイル (`styles.xml`, `addStyle`)                                         | ✅ 完了                                            |
+| M10 | ナンバリング (`numbering.xml`) — bullet / decimal                           | ✅ 完了                                            |
+| M11 | ヘッダー / フッター / セクション (`addHeader`/`addFooter`/`setPageSize` 等) | ✅ 完了                                            |
+| M12 | コメント (`comments.xml` + range + reference, `addComment`)                 | ✅ 完了                                            |
+| M13 | tracked changes (`acceptAllRevisions` / `rejectAllRevisions`)               | ✅ 完了                                            |
+|     | ハイパーリンク (外部 URL + 内部 anchor)                                     | ✅ 完了                                            |
+|     | 脚注 / 巻末注 (`addFootnote` / `addEndnote`)                                | ✅ 完了                                            |
+|     | ブックマーク (`addBookmark` + `addInternalHyperlink`)                       | ✅ 完了                                            |
+|     | ドキュメント文書プロパティ (`coreProperties`)                               | ✅ 完了                                            |
+|     | 全パート横断 find/replace (`replaceTextEverywhere`)                         | ✅ 完了                                            |
+|     | テキスト抽出 (hyperlink/ins/del/sdt/table 横断)                             | ✅ 完了                                            |
+| M14 | SDT / 高度なフィールド (TOC, MERGEFIELD)                                    | ⚪️ raw pass-through で round-trip 可、API は未提供 |
+| M15 | ビルド/perf/docs 最終化、`io-node`/`io-browser` 切り出し                    | ⚪️ 未着手                                          |
+| M16 | 1.0.0 リリース                                                              | ⚪️ 未着手                                          |
 
 実装は `packages/{core,opc,ooxml-xml,wordprocessingml}` の 4 パッケージで構成。実 Word 出力 docx (mammoth.js テスト corpus) で round-trip 検証済み。
+公開 API は `@word-kit/core` に集約。詳細は kitchen-sink integration テスト (`packages/core/src/integration.test.ts`) を参照。
 
 ---
 

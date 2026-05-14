@@ -955,6 +955,45 @@ export function removeParagraph(doc: Docx, index: number): boolean {
   return false;
 }
 
+/**
+ * Remove the `index`-th `<w:tbl>` block from the body (0-based, counted
+ * across only tables — paragraphs in between are not counted). Returns
+ * true on success.
+ */
+export function removeTable(doc: Docx, index: number): boolean {
+  let count = 0;
+  for (let i = 0; i < doc.document.body.blocks.length; i++) {
+    const b = doc.document.body.blocks[i];
+    if (b?.kind === "table") {
+      if (count === index) {
+        doc.document.body.blocks.splice(i, 1);
+        doc.dirty = true;
+        return true;
+      }
+      count++;
+    }
+  }
+  return false;
+}
+
+/**
+ * Remove every `<w:tbl>` block from the body. Returns the number of
+ * tables removed. Paragraphs between or around the tables are kept
+ * untouched.
+ */
+export function removeAllTables(doc: Docx): number {
+  let removed = 0;
+  doc.document.body.blocks = doc.document.body.blocks.filter((b) => {
+    if (b.kind === "table") {
+      removed++;
+      return false;
+    }
+    return true;
+  });
+  if (removed > 0) doc.dirty = true;
+  return removed;
+}
+
 /** Remove all body blocks (paragraphs and tables). The body sectPr is kept. */
 export function clearBody(doc: Docx): void {
   doc.document.body.blocks.length = 0;

@@ -15,6 +15,15 @@ export {
   WML_RELATIONSHIPS,
 } from "./namespaces.js";
 export { parseWmlDocument } from "./parser.js";
+export {
+  documentText,
+  findInParagraph,
+  findText,
+  paragraphText,
+  replaceInParagraph,
+  replaceText,
+  type TextMatch,
+} from "./text-search.js";
 export type {
   PassThrough,
   WmlBlock,

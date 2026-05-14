@@ -16,7 +16,11 @@ export type RelationshipTargetMode = "Internal" | "External";
 export interface Relationship {
   readonly id: RelationshipId;
   readonly type: string;
-  readonly target: string;
+  /**
+   * Where the relationship points. Mutable so callers can rewrite, e.g.,
+   * the URL of a hyperlink rel without re-allocating the rel id.
+   */
+  target: string;
   readonly targetMode: RelationshipTargetMode;
 }
 

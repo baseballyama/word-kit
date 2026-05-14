@@ -1104,6 +1104,58 @@ export function removeAllHyperlinks(doc: Docx): number {
   return unwrapped;
 }
 
+/**
+ * Walk every external hyperlink relationship on `document.xml.rels` and
+ * rewrite the `Target` whenever `predicate(target)` returns a new URL.
+ * Pass a string for `predicate` to match an exact target.
+ *
+ * Returns the number of rels whose target was rewritten. Internal anchor
+ * links (`w:anchor=...`) have no rel and are not touched.
+ *
+ * Useful for swapping the hostname on every template link in one pass,
+ * eg. `setHyperlinkUrl(doc, "https://stage.example.com", "https://example.com")`.
+ */
+export function setHyperlinkUrl(
+  doc: Docx,
+  matcher: string | ((target: string) => string | null | undefined),
+  replacement?: string,
+): number {
+  const docRels = partRelationships(doc.opc, doc.partName);
+  let changed = 0;
+  for (const rel of relationshipsByType(docRels, WML_RELATIONSHIPS.hyperlink)) {
+    if (rel.targetMode !== "External") continue;
+    let next: string | undefined;
+    if (typeof matcher === "string") {
+      if (rel.target === matcher && replacement !== undefined) next = replacement;
+    } else {
+      const candidate = matcher(rel.target);
+      if (typeof candidate === "string" && candidate !== rel.target) next = candidate;
+    }
+    if (next !== undefined) {
+      rel.target = next;
+      changed++;
+    }
+  }
+  if (changed > 0) doc.dirty = true;
+  return changed;
+}
+
+/**
+ * List every external hyperlink relationship currently on
+ * `document.xml.rels`. Each entry includes the rel id and the target URL.
+ * Use this to audit which URLs a template references before deciding
+ * what to rewrite with {@link setHyperlinkUrl}.
+ */
+export function externalHyperlinks(doc: Docx): Array<{ relId: string; target: string }> {
+  const docRels = partRelationships(doc.opc, doc.partName);
+  const out: Array<{ relId: string; target: string }> = [];
+  for (const rel of relationshipsByType(docRels, WML_RELATIONSHIPS.hyperlink)) {
+    if (rel.targetMode !== "External") continue;
+    out.push({ relId: rel.id, target: rel.target });
+  }
+  return out;
+}
+
 /** Remove every bookmark from the body. Returns the count removed. */
 export function removeAllBookmarks(doc: Docx): number {
   const names = bookmarks(doc).map((b) => b.name);

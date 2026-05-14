@@ -1033,6 +1033,40 @@ export function removeAllTables(doc: Docx): number {
   return removed;
 }
 
+/**
+ * Replace the `index`-th `<w:tbl>` in the body with the paragraphs that
+ * appear inside its cells (row-major: row 0 first, then row 1, …; within
+ * each row left-to-right). The original cell paragraph objects are
+ * spliced in directly — table properties (`<w:tblPr>`), row formatting,
+ * and cell formatting are dropped. Useful when an imported template
+ * uses a table only for visual layout and you want to flatten it back to
+ * plain prose.
+ *
+ * Returns the paragraphs that ended up in the body, or `undefined` if no
+ * table exists at the given index.
+ */
+export function unwrapTable(doc: Docx, index: number): WmlParagraph[] | undefined {
+  let count = 0;
+  for (let i = 0; i < doc.document.body.blocks.length; i++) {
+    const b = doc.document.body.blocks[i];
+    if (b?.kind !== "table") continue;
+    if (count !== index) {
+      count++;
+      continue;
+    }
+    const paragraphs: WmlParagraph[] = [];
+    for (const row of b.rows) {
+      for (const cell of row.cells) {
+        for (const p of cell.paragraphs) paragraphs.push(p);
+      }
+    }
+    doc.document.body.blocks.splice(i, 1, ...paragraphs);
+    doc.dirty = true;
+    return paragraphs;
+  }
+  return undefined;
+}
+
 /** Remove all body blocks (paragraphs and tables). The body sectPr is kept. */
 export function clearBody(doc: Docx): void {
   doc.document.body.blocks.length = 0;

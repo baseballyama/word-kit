@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.cache/
+.turbo/
+coverage/
+*.log
+.DS_Store
+.vscode/
+.idea/
+tmp/
+scratch/
+.env
+.env.local

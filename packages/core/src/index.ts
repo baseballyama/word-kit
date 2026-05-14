@@ -11,12 +11,20 @@ export {
   type DocxCreateOptions,
 } from "./docx.js";
 export {
+  appendTextRun,
   type HeaderFooterType,
   MARGINS_NORMAL,
   PAGE_SIZE_A4,
   PAGE_SIZE_LETTER,
   type PageMargins,
   type PageSize,
+  type ParagraphAlignment,
+  type ParagraphIndent,
+  type ParagraphSpacing,
+  type RunFormatting,
+  setParagraphAlignment,
+  setParagraphIndent,
+  setParagraphSpacing,
 } from "@word-kit/wml";
 // Re-export types that are part of the public surface area so consumers can
 // use them without importing from internal packages directly.

@@ -15,10 +15,18 @@ export {
   WML_RELATIONSHIPS,
 } from "./namespaces.js";
 export {
+  appendTextRun,
   type BuildTableOptions,
   buildTextParagraph,
   buildTextRun,
   buildTextTable,
+  type ParagraphAlignment,
+  type ParagraphIndent,
+  type ParagraphSpacing,
+  type RunFormatting,
+  setParagraphAlignment,
+  setParagraphIndent,
+  setParagraphSpacing,
 } from "./builders.js";
 export {
   buildInlineDrawing,

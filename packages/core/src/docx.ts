@@ -931,6 +931,70 @@ export class Docx {
     return this.removeAllHeaderFooterParts(WML_RELATIONSHIPS.footer, "footerReference");
   }
 
+  /**
+   * Remove every user footnote AND every `<w:footnoteReference>` run from
+   * the body. Keeps the standard separator / continuationSeparator entries
+   * intact. Returns the number of user footnotes removed.
+   */
+  removeAllFootnotes(): number {
+    return this.removeAllNotes("footnote");
+  }
+
+  /** Same shape as {@link removeAllFootnotes} but for endnotes. */
+  removeAllEndnotes(): number {
+    return this.removeAllNotes("endnote");
+  }
+
+  private removeAllNotes(kind: "footnote" | "endnote"): number {
+    const part = kind === "footnote" ? this.footnotesPart : this.endnotesPart;
+    if (!part) return 0;
+    let removed = 0;
+    const survivors: typeof part.footnotes = [];
+    for (const note of part.footnotes) {
+      const typeAttr = note.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "type");
+      if (
+        typeAttr &&
+        (typeAttr.value === "separator" || typeAttr.value === "continuationSeparator")
+      ) {
+        survivors.push(note);
+      } else {
+        removed++;
+      }
+    }
+    part.footnotes.length = 0;
+    for (const s of survivors) part.footnotes.push(s);
+    if (kind === "footnote") this.footnotesDirty = true;
+    else this.endnotesDirty = true;
+    // Strip <w:footnoteReference> / <w:endnoteReference> runs from body
+    // paragraphs.
+    const refLocal = kind === "footnote" ? "footnoteReference" : "endnoteReference";
+    const stripFromParagraph = (p: WmlParagraph): void => {
+      p.children = p.children.filter((child) => {
+        if (child.kind !== "raw") return true;
+        if (child.node.name.uri !== WML_NS) return true;
+        if (child.node.name.local !== "r") return true;
+        return !child.node.children.some(
+          (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === refLocal,
+        );
+      });
+    };
+    const walk = (blocks: WmlBlock[]): void => {
+      for (const b of blocks) {
+        if (b.kind === "paragraph") stripFromParagraph(b);
+        else if (b.kind === "table") {
+          for (const row of b.rows) {
+            for (const cell of row.cells) {
+              for (const p of cell.paragraphs) stripFromParagraph(p);
+            }
+          }
+        }
+      }
+    };
+    walk(this.docModel.body.blocks);
+    if (removed > 0) this.dirty = true;
+    return removed;
+  }
+
   private removeAllHeaderFooterParts(relType: string, refLocal: string): number {
     let removed = 0;
     const docRels = this.pkg.partRelationships(this.partName);

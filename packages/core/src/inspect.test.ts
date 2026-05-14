@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest";
+import { Docx } from "./docx.js";
+
+const TINY_PNG = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+  0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xfa, 0xcf, 0x00, 0x00,
+  0x00, 0x02, 0x00, 0x01, 0xe5, 0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
+  0xae, 0x42, 0x60, 0x82,
+]);
+
+const OTHER_PNG = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x42,
+]);
+
+describe("Docx.headers / Docx.footers", () => {
+  it("enumerates header parts with their text content", () => {
+    const doc = Docx.create({ paragraphs: ["body"] });
+    doc.addHeader("Hello Header");
+    doc.addHeader("Second", "first");
+    const heads = doc.headers;
+    expect(heads).toHaveLength(2);
+    expect(heads[0]?.text).toContain("Hello Header");
+    expect(heads[1]?.text).toContain("Second");
+  });
+
+  it("enumerates footer parts with their text content", () => {
+    const doc = Docx.create({ paragraphs: ["body"] });
+    doc.addFooter("Page Footer");
+    const foots = doc.footers;
+    expect(foots).toHaveLength(1);
+    expect(foots[0]?.text).toContain("Page Footer");
+  });
+});
+
+describe("Docx.images / Docx.replaceImage", () => {
+  it("lists media parts and returns each part's bytes", () => {
+    const doc = Docx.create({ paragraphs: [] });
+    doc.addImage(TINY_PNG, { widthEmu: 1000, heightEmu: 1000 });
+    const images = doc.images;
+    expect(images).toHaveLength(1);
+    expect(images[0]?.partName).toBe("/word/media/image1.png");
+    expect(images[0]?.contentType).toBe("image/png");
+    expect(images[0]?.data.length).toBe(TINY_PNG.length);
+  });
+
+  it("replaces an existing image's bytes in place", () => {
+    const doc = Docx.create({ paragraphs: [] });
+    doc.addImage(TINY_PNG, { widthEmu: 1000, heightEmu: 1000 });
+    expect(doc.replaceImage("/word/media/image1.png", OTHER_PNG)).toBe(true);
+    const part = doc.opc.getPart("/word/media/image1.png");
+    expect(part?.data.length).toBe(OTHER_PNG.length);
+
+    // Survives save+reopen with the new bytes:
+    const reopened = Docx.open(doc.toUint8Array());
+    expect(reopened.opc.getPart("/word/media/image1.png")?.data.length).toBe(OTHER_PNG.length);
+  });
+
+  it("replaceImage returns false for unknown parts", () => {
+    const doc = Docx.create({ paragraphs: [] });
+    expect(doc.replaceImage("/word/media/imageXX.png", OTHER_PNG)).toBe(false);
+  });
+});

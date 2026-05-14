@@ -192,6 +192,67 @@ export class Docx {
     return Docx.open(new Uint8Array(buf));
   }
 
+  /**
+   * Return one entry per header part referenced by `document.xml`. Each
+   * entry includes the part name, the relationship id, and the plain-text
+   * content extracted from the part.
+   */
+  get headers(): Array<{ partName: string; relId: string; text: string }> {
+    return this.collectHeaderFooterParts(WML_RELATIONSHIPS.header);
+  }
+
+  /** Same shape as {@link headers} but for footer parts. */
+  get footers(): Array<{ partName: string; relId: string; text: string }> {
+    return this.collectHeaderFooterParts(WML_RELATIONSHIPS.footer);
+  }
+
+  /**
+   * Return one entry per media (image) part. Useful for inspecting which
+   * images a document already contains and feeding their bytes back into
+   * {@link replaceImage}.
+   */
+  get images(): Array<{ partName: string; contentType: string; data: Uint8Array }> {
+    const out: Array<{ partName: string; contentType: string; data: Uint8Array }> = [];
+    for (const part of this.pkg.listParts()) {
+      if (part.name.startsWith("/word/media/")) {
+        out.push({ partName: part.name, contentType: part.contentType, data: part.data });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Replace the bytes of an existing image part in place. The original
+   * relationships are kept, so every place in the document that referenced
+   * the image now points at the new bytes.
+   *
+   * Returns `true` if the part was found and updated, `false` otherwise.
+   */
+  replaceImage(partName: string, newBytes: Uint8Array): boolean {
+    const part = this.pkg.getPart(partName);
+    if (!part) return false;
+    part.data = newBytes;
+    return true;
+  }
+
+  private collectHeaderFooterParts(
+    relType: string,
+  ): Array<{ partName: string; relId: string; text: string }> {
+    const out: Array<{ partName: string; relId: string; text: string }> = [];
+    const docRels = this.pkg.partRelationships(this.partName);
+    for (const rel of docRels.byType(relType)) {
+      if (rel.targetMode === "External") continue;
+      const partName = this.resolvePartTarget(rel.target);
+      const part = this.pkg.getPart(partName);
+      if (!part) continue;
+      const xml = new TextDecoder("utf-8").decode(part.data);
+      const xmlDoc = parseXml(xml);
+      const text = collectVisibleTextFromElement(xmlDoc.root);
+      out.push({ partName, relId: rel.id, text });
+    }
+    return out;
+  }
+
   /** Create a fresh `.docx`. */
   static create(options: DocxCreateOptions = {}): Docx {
     const pkg = buildMinimalDocx();
@@ -1408,4 +1469,27 @@ function isParagraph(block: WmlBlock): block is WmlParagraph {
 
 function isTable(block: WmlBlock): block is WmlTable {
   return block.kind === "table";
+}
+
+function collectVisibleTextFromElement(el: XmlElement): string {
+  let acc = "";
+  let paragraphBreak = false;
+  const visit = (e: XmlElement): void => {
+    if (e.name.uri === WML_NS && e.name.local === "p" && paragraphBreak) {
+      acc += "\n";
+    }
+    paragraphBreak = e.name.uri === WML_NS && e.name.local === "p";
+    if (e.name.uri === WML_NS && (e.name.local === "t" || e.name.local === "delText")) {
+      for (const c of e.children) {
+        if (c.kind === "text") acc += c.value;
+        else if (c.kind === "cdata") acc += c.value;
+      }
+      return;
+    }
+    for (const c of e.children) {
+      if (c.kind === "element") visit(c);
+    }
+  };
+  visit(el);
+  return acc;
 }

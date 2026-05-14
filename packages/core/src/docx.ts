@@ -1990,6 +1990,73 @@ export function appendField(
   doc.dirty = true;
 }
 
+export interface AddTableOfContentsOptions {
+  /** Inclusive heading-level range. Defaults to 1-3. */
+  readonly headingLevels?: { from: number; to: number };
+  /** Placeholder text Word displays before the field is refreshed. */
+  readonly placeholderText?: string;
+}
+
+/**
+ * Append a Table of Contents field to the document body. The TOC is
+ * inserted as a single paragraph holding a complex field whose
+ * instruction follows Word's canonical form
+ * `TOC \o "1-3" \h \z \u` (heading levels 1-3, hyperlinks on, hide
+ * tab leader/page number on web layout, use outline level).
+ *
+ * Word recomputes the actual entries on first open — until then the
+ * placeholder text is shown.
+ */
+export function addTableOfContents(
+  doc: Docx,
+  options: AddTableOfContentsOptions = {},
+): WmlParagraph {
+  const from = options.headingLevels?.from ?? 1;
+  const to = options.headingLevels?.to ?? 3;
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from || to > 9) {
+    throw new Error(
+      `Invalid TOC heading-level range: ${from}-${to}. Expected 1 <= from <= to <= 9.`,
+    );
+  }
+  const instruction = `TOC \\o "${from}-${to}" \\h \\z \\u`;
+  const placeholder = options.placeholderText ?? "Right-click and choose Update Field.";
+  const paragraph: WmlParagraph = {
+    kind: "paragraph",
+    children: [],
+    extras: [],
+  };
+  for (const run of buildFieldRuns(instruction, placeholder)) {
+    paragraph.children.push({ kind: "raw", node: run });
+  }
+  doc.document.body.blocks.push(paragraph);
+  doc.dirty = true;
+  return paragraph;
+}
+
+/**
+ * Append a MERGEFIELD field referencing `fieldName` to `paragraph`. The
+ * placeholder text Word shows is `«fieldName»` by default, matching
+ * Word's own UI; pass `displayText` to override.
+ */
+export function appendMergeField(
+  doc: Docx,
+  paragraph: WmlParagraph,
+  fieldName: string,
+  displayText?: string,
+): void {
+  if (!/^[A-Za-z_][\w]*$/.test(fieldName)) {
+    throw new Error(
+      `MERGEFIELD name must be an alphanumeric identifier (letters/digits/underscore, starting with a letter), got ${JSON.stringify(fieldName)}.`,
+    );
+  }
+  const instruction = `MERGEFIELD ${fieldName} \\* MERGEFORMAT`;
+  const display = displayText ?? `«${fieldName}»`;
+  for (const run of buildFieldRuns(instruction, display)) {
+    paragraph.children.push({ kind: "raw", node: run });
+  }
+  doc.dirty = true;
+}
+
 /** Like {@link addHeader} but for a footer. */
 export function addFooter(doc: Docx, text: string, type: HeaderFooterType = "default"): string {
   const partName = allocateFooterPartName(doc);

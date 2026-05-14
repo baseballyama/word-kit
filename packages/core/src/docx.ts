@@ -972,6 +972,86 @@ export class Docx {
     return n;
   }
 
+  /**
+   * Shortcut for `appendParagraph(text, { style: "Heading{level}" })`. Note
+   * that the referenced `HeadingN` style must be present in `styles.xml`
+   * for Word to render it as a heading — call {@link ensureHeadingStyles}
+   * once during setup if you want defaults to be defined automatically.
+   */
+  appendHeading(text: string, level = 1): WmlParagraph {
+    if (level < 1 || level > 9 || !Number.isInteger(level)) {
+      throw new Error(`Heading level must be an integer in 1..9, got ${level}`);
+    }
+    return this.appendParagraph(text, { style: `Heading${level}` });
+  }
+
+  /**
+   * Ensure default `Heading1`..`Heading{maxLevel}` styles exist in
+   * `styles.xml`. Each missing style is added with sensible defaults
+   * (smaller / lighter as the level increases). Existing same-id styles
+   * are left untouched.
+   */
+  ensureHeadingStyles(maxLevel = 3): void {
+    const sizes = [40, 32, 28, 24, 22, 22, 22, 22, 22];
+    const colors = [
+      "1F497D",
+      "1F497D",
+      "4F81BD",
+      "4F81BD",
+      "8DB3E2",
+      "8DB3E2",
+      "8DB3E2",
+      "8DB3E2",
+      "8DB3E2",
+    ];
+    const part = this.stylesPart;
+    for (let lvl = 1; lvl <= Math.min(maxLevel, 9); lvl++) {
+      const id = `Heading${lvl}`;
+      if (
+        part?.styles.some((s) => s.attrs.some((a) => a.name.local === "styleId" && a.value === id))
+      )
+        continue;
+      this.addStyle({
+        type: "paragraph",
+        styleId: id,
+        name: `heading ${lvl}`,
+        basedOn: "Normal",
+        next: "Normal",
+        qFormat: true,
+        uiPriority: 9,
+        bold: lvl <= 2,
+        fontSizeHalfPoints: sizes[lvl - 1] ?? 24,
+        color: colors[lvl - 1] ?? "1F497D",
+      });
+    }
+  }
+
+  /**
+   * Extract a document outline — every paragraph whose pStyle matches
+   * `Heading{level}`. Each entry includes the paragraph reference, the
+   * heading level (1-9), and the visible text.
+   */
+  outline(): Array<{ paragraph: WmlParagraph; level: number; text: string }> {
+    const out: Array<{ paragraph: WmlParagraph; level: number; text: string }> = [];
+    for (const block of this.docModel.body.blocks) {
+      if (block.kind !== "paragraph") continue;
+      const style = block.pPr?.children.find(
+        (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === "pStyle",
+      );
+      if (style?.kind !== "element") continue;
+      const styleId = style.attrs.find(
+        (a) => a.name.uri === WML_NS && a.name.local === "val",
+      )?.value;
+      if (!styleId) continue;
+      const m = /^Heading(\d)$/.exec(styleId);
+      if (!m) continue;
+      const level = Number.parseInt(m[1] ?? "0", 10);
+      if (!Number.isFinite(level) || level < 1 || level > 9) continue;
+      out.push({ paragraph: block, level, text: documentTextOfParagraph(block) });
+    }
+    return out;
+  }
+
   /** Append a paragraph containing a single text run to the body. */
   appendParagraph(text: string, options: AppendParagraphOptions = {}): WmlParagraph {
     const piece: WmlRunPiece = {
@@ -1591,6 +1671,30 @@ function findMainDocumentPart(pkg: OpcPackage): Part | undefined {
     if (part) return part;
   }
   return pkg.getPart(DOCUMENT_PART_FALLBACK);
+}
+
+function documentTextOfParagraph(p: WmlParagraph): string {
+  let acc = "";
+  for (const child of p.children) {
+    if (child.kind === "run") {
+      for (const piece of child.pieces) {
+        if (piece.kind === "text" || piece.kind === "delText") acc += piece.value;
+      }
+    } else if (child.kind === "raw") {
+      const visit = (el: XmlElement): void => {
+        if (el.name.uri === WML_NS && (el.name.local === "t" || el.name.local === "delText")) {
+          for (const c of el.children) {
+            if (c.kind === "text") acc += c.value;
+            else if (c.kind === "cdata") acc += c.value;
+          }
+          return;
+        }
+        for (const c of el.children) if (c.kind === "element") visit(c);
+      };
+      visit(child.node);
+    }
+  }
+  return acc;
 }
 
 function buildPgSzElement(size: PageSize): XmlElement {

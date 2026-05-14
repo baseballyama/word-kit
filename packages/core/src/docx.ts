@@ -182,6 +182,16 @@ export class Docx {
     return new Docx(pkg, wml, part.name);
   }
 
+  /**
+   * Convenience for browser-side callers: open a `.docx` from a `Blob` or
+   * `File`. Awaits the underlying `ArrayBuffer` and delegates to
+   * {@link Docx.open}.
+   */
+  static async fromBlob(blob: Blob): Promise<Docx> {
+    const buf = await blob.arrayBuffer();
+    return Docx.open(new Uint8Array(buf));
+  }
+
   /** Create a fresh `.docx`. */
   static create(options: DocxCreateOptions = {}): Docx {
     const pkg = buildMinimalDocx();
@@ -419,9 +429,81 @@ export class Docx {
     return table;
   }
 
-  /** Search the document for all matches of `query`. */
+  /** Search the document body for all matches of `query`. */
   findText(query: string | RegExp): TextMatch[] {
     return findText(this.docModel, query);
+  }
+
+  /**
+   * Find every occurrence of `query` across the body and all
+   * header/footer/comment/footnote/endnote parts. Returns an array of
+   * `{ partName, matches }` entries (the body uses `"/word/document.xml"`).
+   *
+   * Useful for inspecting a template before calling
+   * {@link replaceTextEverywhere}.
+   */
+  findTextEverywhere(query: string | RegExp): Array<{
+    partName: string;
+    matches: TextMatch[];
+  }> {
+    const out: Array<{ partName: string; matches: TextMatch[] }> = [];
+    const bodyMatches = findText(this.docModel, query);
+    if (bodyMatches.length > 0) {
+      out.push({ partName: this.partName, matches: bodyMatches });
+    }
+    // Flush dirty side-parts so the XML walk sees their current state.
+    if (this.commentsDirty && this.commentsCache) {
+      this.flushComments(this.commentsCache);
+      this.commentsDirty = false;
+      this.commentsCache = undefined;
+    }
+    if (this.footnotesDirty && this.footnotesCache) {
+      this.flushNotes(this.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
+      this.footnotesDirty = false;
+      this.footnotesCache = undefined;
+    }
+    if (this.endnotesDirty && this.endnotesCache) {
+      this.flushNotes(this.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
+      this.endnotesDirty = false;
+      this.endnotesCache = undefined;
+    }
+    const docRels = this.pkg.partRelationships(this.partName);
+    for (const rel of docRels.all) {
+      if (rel.targetMode === "External") continue;
+      if (
+        rel.type !== WML_RELATIONSHIPS.header &&
+        rel.type !== WML_RELATIONSHIPS.footer &&
+        rel.type !== WML_RELATIONSHIPS.comments &&
+        rel.type !== WML_RELATIONSHIPS.footnotes &&
+        rel.type !== WML_RELATIONSHIPS.endnotes
+      )
+        continue;
+      const partName = this.resolvePartTarget(rel.target);
+      const part = this.pkg.getPart(partName);
+      if (!part) continue;
+      const xml = new TextDecoder("utf-8").decode(part.data);
+      const xmlDoc = parseXml(xml);
+      const matches: TextMatch[] = [];
+      const visit = (el: XmlElement): void => {
+        for (const child of el.children) {
+          if (!child || child.kind !== "element") continue;
+          if (child.name.uri === WML_NS && child.name.local === "p") {
+            const para = parseParagraph(child);
+            matches.push(
+              ...findText(
+                { rootAttrs: [], body: { blocks: [para], extras: [] }, extras: [] },
+                query,
+              ),
+            );
+          } else {
+            visit(child);
+          }
+        }
+      };
+      visit(xmlDoc.root);
+      if (matches.length > 0) out.push({ partName, matches });
+    }
+    return out;
   }
 
   /**

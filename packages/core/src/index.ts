@@ -12,6 +12,9 @@ export {
 } from "./docx.js";
 export {
   appendTextRun,
+  getParagraphAlignment,
+  getParagraphNumbering,
+  getParagraphStyle,
   type HeaderFooterType,
   MARGINS_NORMAL,
   PAGE_SIZE_A4,
@@ -25,6 +28,7 @@ export {
   setParagraphAlignment,
   setParagraphIndent,
   setParagraphSpacing,
+  setParagraphText,
 } from "@word-kit/wml";
 // Re-export types that are part of the public surface area so consumers can
 // use them without importing from internal packages directly.

@@ -20,6 +20,9 @@ export {
   buildTextParagraph,
   buildTextRun,
   buildTextTable,
+  getParagraphAlignment,
+  getParagraphNumbering,
+  getParagraphStyle,
   type ParagraphAlignment,
   type ParagraphIndent,
   type ParagraphSpacing,
@@ -27,6 +30,7 @@ export {
   setParagraphAlignment,
   setParagraphIndent,
   setParagraphSpacing,
+  setParagraphText,
 } from "./builders.js";
 export {
   buildInlineDrawing,

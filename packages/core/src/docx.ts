@@ -681,6 +681,136 @@ export class Docx {
   }
 
   /**
+   * Append a section break paragraph. The paragraph terminates the current
+   * section; subsequent paragraphs belong to the new section. Page size /
+   * margins on the section break override the body trailing sectPr for
+   * everything from this point on.
+   */
+  appendSectionBreak(
+    type: "continuous" | "nextPage" | "evenPage" | "oddPage" | "nextColumn" = "nextPage",
+    options: { pageSize?: PageSize; pageMargins?: PageMargins } = {},
+  ): WmlParagraph {
+    const sectPrChildren: XmlElement[] = [
+      {
+        kind: "element",
+        name: { uri: WML_NS, local: "type", prefix: "w" },
+        attrs: [
+          { name: { uri: WML_NS, local: "val", prefix: "w" }, value: type, isNamespaceDecl: false },
+        ],
+        children: [],
+        xmlSpace: "default",
+        selfClosing: true,
+      },
+    ];
+    if (options.pageSize) {
+      sectPrChildren.push(buildPgSzElement(options.pageSize));
+    }
+    if (options.pageMargins) {
+      sectPrChildren.push(buildPgMarElement(options.pageMargins));
+    }
+    const sectPr: XmlElement = {
+      kind: "element",
+      name: { uri: WML_NS, local: "sectPr", prefix: "w" },
+      attrs: [],
+      children: sectPrChildren,
+      xmlSpace: "default",
+      selfClosing: false,
+    };
+    const pPr: XmlElement = {
+      kind: "element",
+      name: { uri: WML_NS, local: "pPr", prefix: "w" },
+      attrs: [],
+      children: [sectPr],
+      xmlSpace: "default",
+      selfClosing: false,
+    };
+    const paragraph: WmlParagraph = {
+      kind: "paragraph",
+      pPr,
+      children: [],
+      extras: [],
+    };
+    this.docModel.body.blocks.push(paragraph);
+    this.dirty = true;
+    return paragraph;
+  }
+
+  /** Remove the paragraph at `index` from the body. Returns true on success. */
+  removeParagraph(index: number): boolean {
+    let count = 0;
+    for (let i = 0; i < this.docModel.body.blocks.length; i++) {
+      const b = this.docModel.body.blocks[i];
+      if (b?.kind === "paragraph") {
+        if (count === index) {
+          this.docModel.body.blocks.splice(i, 1);
+          this.dirty = true;
+          return true;
+        }
+        count++;
+      }
+    }
+    return false;
+  }
+
+  /** Remove all body blocks (paragraphs and tables). The body sectPr is kept. */
+  clearBody(): void {
+    this.docModel.body.blocks.length = 0;
+    this.dirty = true;
+  }
+
+  /**
+   * Remove every comment from `comments.xml` AND every comment range
+   * marker and reference run from `document.xml`. Returns the number of
+   * comments removed.
+   */
+  removeAllComments(): number {
+    const part = this.commentsPart;
+    let removed = 0;
+    if (part) {
+      removed = part.comments.length;
+      part.comments.length = 0;
+      this.commentsDirty = true;
+    }
+    // Strip commentRangeStart / commentRangeEnd / commentReference from the body.
+    const stripFromParagraph = (p: WmlParagraph): void => {
+      p.children = p.children.filter((child) => {
+        if (child.kind !== "raw") return true;
+        const local = child.node.name.local;
+        if (
+          child.node.name.uri === WML_NS &&
+          (local === "commentRangeStart" ||
+            local === "commentRangeEnd" ||
+            (local === "r" &&
+              child.node.children.some(
+                (c) =>
+                  c.kind === "element" &&
+                  c.name.uri === WML_NS &&
+                  c.name.local === "commentReference",
+              )))
+        ) {
+          return false;
+        }
+        return true;
+      });
+    };
+    const walk = (blocks: WmlBlock[]): void => {
+      for (const b of blocks) {
+        if (b.kind === "paragraph") stripFromParagraph(b);
+        else if (b.kind === "table") {
+          for (const row of b.rows) {
+            for (const cell of row.cells) {
+              for (const p of cell.paragraphs) stripFromParagraph(p);
+            }
+          }
+        }
+      }
+    };
+    walk(this.docModel.body.blocks);
+    if (removed > 0) this.dirty = true;
+    return removed;
+  }
+
+  /**
    * Append a paragraph whose only content is a page break. Equivalent to
    * Ctrl+Enter in Word.
    */
@@ -1461,6 +1591,83 @@ function findMainDocumentPart(pkg: OpcPackage): Part | undefined {
     if (part) return part;
   }
   return pkg.getPart(DOCUMENT_PART_FALLBACK);
+}
+
+function buildPgSzElement(size: PageSize): XmlElement {
+  const attrs = [
+    {
+      name: { uri: WML_NS, local: "w", prefix: "w" },
+      value: String(size.widthTwips),
+      isNamespaceDecl: false,
+    },
+    {
+      name: { uri: WML_NS, local: "h", prefix: "w" },
+      value: String(size.heightTwips),
+      isNamespaceDecl: false,
+    },
+  ];
+  if (size.orientation === "landscape") {
+    attrs.push({
+      name: { uri: WML_NS, local: "orient", prefix: "w" },
+      value: "landscape",
+      isNamespaceDecl: false,
+    });
+  }
+  return {
+    kind: "element",
+    name: { uri: WML_NS, local: "pgSz", prefix: "w" },
+    attrs,
+    children: [],
+    xmlSpace: "default",
+    selfClosing: true,
+  };
+}
+
+function buildPgMarElement(m: PageMargins): XmlElement {
+  return {
+    kind: "element",
+    name: { uri: WML_NS, local: "pgMar", prefix: "w" },
+    attrs: [
+      {
+        name: { uri: WML_NS, local: "top", prefix: "w" },
+        value: String(m.top),
+        isNamespaceDecl: false,
+      },
+      {
+        name: { uri: WML_NS, local: "right", prefix: "w" },
+        value: String(m.right),
+        isNamespaceDecl: false,
+      },
+      {
+        name: { uri: WML_NS, local: "bottom", prefix: "w" },
+        value: String(m.bottom),
+        isNamespaceDecl: false,
+      },
+      {
+        name: { uri: WML_NS, local: "left", prefix: "w" },
+        value: String(m.left),
+        isNamespaceDecl: false,
+      },
+      {
+        name: { uri: WML_NS, local: "header", prefix: "w" },
+        value: String(m.header),
+        isNamespaceDecl: false,
+      },
+      {
+        name: { uri: WML_NS, local: "footer", prefix: "w" },
+        value: String(m.footer),
+        isNamespaceDecl: false,
+      },
+      {
+        name: { uri: WML_NS, local: "gutter", prefix: "w" },
+        value: String(m.gutter),
+        isNamespaceDecl: false,
+      },
+    ],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: true,
+  };
 }
 
 function isParagraph(block: WmlBlock): block is WmlParagraph {

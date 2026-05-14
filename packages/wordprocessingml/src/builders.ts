@@ -287,6 +287,71 @@ function ensurePPr(p: WmlParagraph): XmlElement {
   return pPr;
 }
 
+/** Read `<w:pStyle w:val>` from a paragraph's pPr, or `undefined`. */
+export function getParagraphStyle(p: WmlParagraph): string | undefined {
+  return refChildVal(p.pPr, "pStyle");
+}
+
+/** Read `<w:jc w:val>` from a paragraph's pPr as a typed value, or `undefined`. */
+export function getParagraphAlignment(p: WmlParagraph): ParagraphAlignment | undefined {
+  const v = refChildVal(p.pPr, "jc");
+  if (v === "left" || v === "center" || v === "right" || v === "both" || v === "distribute")
+    return v;
+  return undefined;
+}
+
+/** Read the numbering reference (`<w:numPr>` → `numId` / `ilvl`) if present. */
+export function getParagraphNumbering(
+  p: WmlParagraph,
+): { numId: number; ilvl: number } | undefined {
+  if (!p.pPr) return undefined;
+  const numPr = p.pPr.children.find(
+    (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === "numPr",
+  );
+  if (!numPr || numPr.kind !== "element") return undefined;
+  const numIdEl = numPr.children.find(
+    (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === "numId",
+  );
+  const ilvlEl = numPr.children.find(
+    (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === "ilvl",
+  );
+  if (!numIdEl || numIdEl.kind !== "element") return undefined;
+  const numIdAttr = numIdEl.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "val");
+  if (!numIdAttr) return undefined;
+  const numIdVal = Number.parseInt(numIdAttr.value, 10);
+  const ilvlAttr =
+    ilvlEl?.kind === "element"
+      ? ilvlEl.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "val")
+      : undefined;
+  const ilvlVal = ilvlAttr ? Number.parseInt(ilvlAttr.value, 10) : 0;
+  if (!Number.isFinite(numIdVal)) return undefined;
+  return { numId: numIdVal, ilvl: Number.isFinite(ilvlVal) ? ilvlVal : 0 };
+}
+
+/**
+ * Replace a paragraph's content with a single styled text run. Existing
+ * runs and inline children are removed; existing pPr is kept.
+ */
+export function setParagraphText(
+  p: WmlParagraph,
+  text: string,
+  formatting: RunFormatting = {},
+): void {
+  p.children = [];
+  appendTextRun(p, text, formatting);
+}
+
+function refChildVal(parent: XmlElement | undefined, local: string): string | undefined {
+  if (!parent) return undefined;
+  for (const c of parent.children) {
+    if (c.kind === "element" && c.name.uri === WML_NS && c.name.local === local) {
+      const attr = c.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "val");
+      return attr?.value;
+    }
+  }
+  return undefined;
+}
+
 function wmlEmpty(local: string, attrs: XmlAttr[]): XmlElement {
   return {
     kind: "element",

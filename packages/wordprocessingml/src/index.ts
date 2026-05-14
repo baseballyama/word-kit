@@ -37,7 +37,10 @@ export {
   setParagraphSpacing,
   setParagraphText,
   setRunFormat,
+  setTableBorders,
   setTableCellText,
+  type TableBorderStyle,
+  type TableBordersOptions,
 } from "./builders.js";
 export {
   buildInlineDrawing,

@@ -138,6 +138,83 @@ function cellPropertiesWithWidth(widthTwips: number): XmlElement {
   };
 }
 
+export type TableBorderStyle = "none" | "single" | "double" | "dashed" | "dotted" | "thick";
+
+export interface TableBordersOptions {
+  /** Stroke style — defaults to `"single"`. Pass `"none"` to clear borders. */
+  readonly style?: TableBorderStyle;
+  /** Stroke width in eighths of a point — Word's `w:sz`. Defaults to 4 (½ pt). */
+  readonly sizeEighthsOfPoint?: number;
+  /** Hex RGB without a leading `#`. Defaults to `"auto"`. */
+  readonly color?: string;
+  /**
+   * When `true` (default), also draws the interior gridlines
+   * (`<w:insideH/>` and `<w:insideV/>`). Disable for an outer-only frame.
+   */
+  readonly inside?: boolean;
+}
+
+/**
+ * Set uniform borders on every side of `table`. Replaces any existing
+ * `<w:tblBorders>` block; the rest of `<w:tblPr>` (width, look, etc.)
+ * is preserved.
+ *
+ * Example: a half-point single-line frame around the whole table —
+ *   `setTableBorders(table, {});`
+ *
+ * Example: thick double border, outer only —
+ *   `setTableBorders(table, { style: "double", sizeEighthsOfPoint: 12, inside: false });`
+ *
+ * Example: no borders at all —
+ *   `setTableBorders(table, { style: "none" });`
+ */
+export function setTableBorders(table: WmlTable, options: TableBordersOptions = {}): void {
+  const style = options.style ?? "single";
+  const sz = String(options.sizeEighthsOfPoint ?? 4);
+  const color = options.color ?? "auto";
+  const inside = options.inside ?? true;
+
+  const tblPr = table.tblPr ?? {
+    kind: "element",
+    name: { uri: WML_NS, local: "tblPr", prefix: "w" },
+    attrs: [],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  const children = tblPr.children as XmlElement[];
+  // Drop any existing tblBorders before re-adding ours.
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === "tblBorders") {
+      children.splice(i, 1);
+    }
+  }
+  const borderAttrs = (): XmlAttr[] => [
+    wmlAttr("val", style),
+    wmlAttr("sz", sz),
+    wmlAttr("space", "0"),
+    wmlAttr("color", color),
+  ];
+  const sides = ["top", "left", "bottom", "right"];
+  if (inside) sides.push("insideH", "insideV");
+  const bordersEl: XmlElement = {
+    kind: "element",
+    name: { uri: WML_NS, local: "tblBorders", prefix: "w" },
+    attrs: [],
+    children: sides.map((s) => wmlEmpty(s, borderAttrs())),
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  // tblBorders must appear after tblW per the spec; we insert as the first
+  // child after tblW if it's present, else just push to the end.
+  const tblWIdx = children.findIndex((c) => c.kind === "element" && c.name.local === "tblW");
+  if (tblWIdx >= 0) children.splice(tblWIdx + 1, 0, bordersEl);
+  else children.unshift(bordersEl);
+
+  if (!table.tblPr) table.tblPr = tblPr;
+}
+
 export interface RunFormatting {
   readonly bold?: boolean;
   readonly italic?: boolean;

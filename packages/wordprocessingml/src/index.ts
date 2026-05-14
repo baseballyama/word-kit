@@ -26,6 +26,7 @@ export {
   type InlineDrawingOptions,
   sniffImageContentType,
 } from "./drawing.js";
+export { type BuildHyperlinkOptions, buildHyperlink, buildHyperlinkRun } from "./hyperlink.js";
 export {
   type BuildCommentOptions,
   buildComment,

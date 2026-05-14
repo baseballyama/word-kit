@@ -1,8 +1,32 @@
 # word-kit 実装計画 (v1)
 
-> ステータス: 設計フェーズ。実装着手前。
+> ステータス: **実装中**。M1-M13 完了 (機能完全度 80%+)。139 tests、すべて green、5500+ LOC、main に直接 push。
 > スコープは **`.docx` (WordprocessingML)** のみ。pptx / xlsx は Out of scope (`CLAUDE.md` 参照)。
 > OPC / DrawingML 層は **将来 pptx/xlsx へ転用可能** な形で設計するが、当面は docx を成立させることに集中する。
+
+## 進捗ステータス (2026-05-14)
+
+| M   | 概要                                                          | 状態                                               |
+| --- | ------------------------------------------------------------- | -------------------------------------------------- |
+| M1  | OPC 読み書き + 完全 round-trip                                | ✅ 完了                                            |
+| M2  | XML AST コア (`@word-kit/ooxml-xml`)                          | ✅ 完了                                            |
+| M3  | WordprocessingML 最小 AST (parser + writer)                   | ✅ 完了                                            |
+| M4  | Run-spanning find/replace                                     | ✅ 完了                                            |
+| M5  | `Docx.create` / `Docx.open` / `toUint8Array`                  | ✅ 完了                                            |
+| M6  | ブロック挿入 + 段落 API                                       | ✅ 完了 (M5 に内包)                                |
+| M7  | 画像 (inline DrawingML)                                       | ✅ 完了                                            |
+| M8  | テーブル (構造化 AST)                                         | ✅ 完了                                            |
+| M9  | スタイル (`styles.xml`)                                       | ✅ 完了                                            |
+| M10 | ナンバリング (`numbering.xml`) — bullet / decimal             | ✅ 完了                                            |
+| M11 | ヘッダー / フッター / セクションプロパティ                    | ✅ 完了                                            |
+| M12 | コメント (`comments.xml` + range + reference)                 | ✅ 完了                                            |
+| M13 | tracked changes (`acceptAllRevisions` / `rejectAllRevisions`) | ✅ 完了                                            |
+|     | ハイパーリンク (external URL)                                 | ✅ 完了                                            |
+| M14 | SDT / ブックマーク / 高度なフィールド                         | ⚪️ raw pass-through で round-trip 可、API は未提供 |
+| M15 | ビルド/perf/docs 最終化                                       | ⚪️ 未着手                                          |
+| M16 | 1.0.0 リリース                                                | ⚪️ 未着手                                          |
+
+実装は `packages/{core,opc,ooxml-xml,wordprocessingml}` の 4 パッケージで構成。実 Word 出力 docx (mammoth.js テスト corpus) で round-trip 検証済み。
 
 ---
 

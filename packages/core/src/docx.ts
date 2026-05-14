@@ -18,6 +18,8 @@ import {
   buildCommentReferenceRun,
   buildFooterXml,
   buildHeaderXml,
+  buildHyperlink,
+  buildHyperlinkRun,
   buildInlineDrawing,
   buildNum,
   buildPPrWithNumPr,
@@ -416,6 +418,33 @@ export class Docx {
   /** Visible text of the document. Paragraphs are joined with `\n`. */
   get text(): string {
     return documentText(this.docModel);
+  }
+
+  /**
+   * Append a paragraph containing a single external hyperlink. Creates an
+   * external relationship (TargetMode=External) for the URL and wraps a
+   * styled run inside `<w:hyperlink>`.
+   */
+  addHyperlink(url: string, text: string, options: { tooltip?: string } = {}): WmlParagraph {
+    const docRels = this.pkg.partRelationships(this.partName);
+    const rel = docRels.add({
+      type: WML_RELATIONSHIPS.hyperlink,
+      target: url,
+      targetMode: "External",
+    });
+    const hyperlinkEl = buildHyperlink({
+      relId: rel.id,
+      runs: [buildHyperlinkRun(text)],
+      ...(options.tooltip !== undefined ? { tooltip: options.tooltip } : {}),
+    });
+    const paragraph: WmlParagraph = {
+      kind: "paragraph",
+      children: [{ kind: "raw", node: hyperlinkEl }],
+      extras: [],
+    };
+    this.docModel.body.blocks.push(paragraph);
+    this.dirty = true;
+    return paragraph;
   }
 
   /**

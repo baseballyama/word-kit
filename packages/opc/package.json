@@ -41,6 +41,9 @@
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json"
   },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  },
   "engines": {
     "node": ">=20"
   }

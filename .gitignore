@@ -12,3 +12,7 @@ tmp/
 scratch/
 .env
 .env.local
+
+# Downloaded reference material — see scripts/fetch-specs.sh
+docs/specs/ecma-376/
+docs/specs/xsd/

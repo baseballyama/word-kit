@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import { addBulletList, applyListToParagraph, createDocx, paragraphs } from "./docx.js";
 
 describe("Docx.applyListToParagraph", () => {
   it("attaches numbering to an existing paragraph", () => {
-    const doc = Docx.create({ paragraphs: ["plain", "second"] });
-    const para = doc.paragraphs[0];
+    const doc = createDocx({ paragraphs: ["plain", "second"] });
+    const para = paragraphs(doc)[0];
     if (!para) return;
     // First create a bullet numId via addBulletList so numbering.xml exists.
-    const seeded = doc.addBulletList(["seed"]);
+    const seeded = addBulletList(doc, ["seed"]);
     const numId = (() => {
       // The seeded paragraph has the new bullet numId in its numPr.
       const p = seeded[0];
@@ -20,17 +20,17 @@ describe("Docx.applyListToParagraph", () => {
     })();
     expect(numId).toBeDefined();
     if (numId === undefined) return;
-    doc.applyListToParagraph(para, numId);
+    applyListToParagraph(doc, para, numId);
     // numPr is now attached to the originally-plain paragraph.
     const has = para.pPr?.children.some((c) => c.kind === "element" && c.name.local === "numPr");
     expect(has).toBe(true);
   });
 
   it("replaces an existing numPr rather than duplicating it", () => {
-    const doc = Docx.create({ paragraphs: ["body"] });
-    const para = doc.paragraphs[0];
+    const doc = createDocx({ paragraphs: ["body"] });
+    const para = paragraphs(doc)[0];
     if (!para) return;
-    const seeded = doc.addBulletList(["x"]);
+    const seeded = addBulletList(doc, ["x"]);
     const p = seeded[0];
     if (!p) return;
     const numPr = p.pPr?.children.find((c) => c.kind === "element" && c.name.local === "numPr");
@@ -42,8 +42,8 @@ describe("Docx.applyListToParagraph", () => {
         : "1",
       10,
     );
-    doc.applyListToParagraph(para, numId);
-    doc.applyListToParagraph(para, numId);
+    applyListToParagraph(doc, para, numId);
+    applyListToParagraph(doc, para, numId);
     const numPrs =
       para.pPr?.children.filter((c) => c.kind === "element" && c.name.local === "numPr").length ??
       0;

@@ -1,17 +1,17 @@
 import { getPart, writeOpcPackage } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import { addTable, appendParagraph, createDocx, openDocx, tables, toUint8Array } from "./docx.js";
 
 describe("Docx.addTable", () => {
   it("appends a table with the requested cell text", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.addTable([
+    const doc = createDocx({ paragraphs: [] });
+    addTable(doc, [
       ["Name", "Score"],
       ["Alice", "90"],
       ["Bob", "85"],
     ]);
-    expect(doc.tables).toHaveLength(1);
-    const t = doc.tables[0];
+    expect(tables(doc)).toHaveLength(1);
+    const t = tables(doc)[0];
     expect(t).toBeDefined();
     expect(t?.rows).toHaveLength(3);
     expect(t?.rows[0]?.cells).toHaveLength(2);
@@ -20,30 +20,30 @@ describe("Docx.addTable", () => {
   });
 
   it("survives a save+reopen round-trip", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.addTable([
+    const doc = createDocx({ paragraphs: [] });
+    addTable(doc, [
       ["A", "B", "C"],
       ["1", "2", "3"],
     ]);
-    const reopened = Docx.open(doc.toUint8Array());
-    expect(reopened.tables).toHaveLength(1);
-    const t = reopened.tables[0];
+    const reopened = openDocx(toUint8Array(doc));
+    expect(tables(reopened)).toHaveLength(1);
+    const t = tables(reopened)[0];
     expect(t?.rows).toHaveLength(2);
     expect(t?.rows[0]?.cells).toHaveLength(3);
   });
 
   it("pads short rows with empty cells", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.addTable([["a", "b", "c"], ["x"]]);
-    const t = doc.tables[0];
+    const doc = createDocx({ paragraphs: [] });
+    addTable(doc, [["a", "b", "c"], ["x"]]);
+    const t = tables(doc)[0];
     expect(t?.rows[1]?.cells).toHaveLength(3);
   });
 
   it("the body keeps paragraphs and tables in the order they were added", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.appendParagraph("before");
-    doc.addTable([["x"]]);
-    doc.appendParagraph("after");
+    const doc = createDocx({ paragraphs: [] });
+    appendParagraph(doc, "before");
+    addTable(doc, [["x"]]);
+    appendParagraph(doc, "after");
     const kinds = doc.document.body.blocks.map((b) => b.kind);
     expect(kinds).toEqual(["paragraph", "table", "paragraph"]);
   });
@@ -61,14 +61,14 @@ describe("Docx.addTable", () => {
       "</w:body>" +
       "</w:document>";
     // Embed the template into a fresh package so we can open it.
-    const seed = Docx.create({ paragraphs: [] });
+    const seed = createDocx({ paragraphs: [] });
     const docPart = getPart(seed.opc, "/word/document.xml");
     if (!docPart) throw new Error("no document part");
     docPart.data = new TextEncoder().encode(xml);
     const bytes = writeOpcPackage(seed.opc);
-    const reopened = Docx.open(bytes);
-    expect(reopened.tables).toHaveLength(1);
-    const t = reopened.tables[0];
+    const reopened = openDocx(bytes);
+    expect(tables(reopened)).toHaveLength(1);
+    const t = tables(reopened)[0];
     expect(t?.rows[0]?.cells[0]?.paragraphs[0]).toBeDefined();
   });
 });

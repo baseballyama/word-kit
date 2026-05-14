@@ -1,16 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import {
+  addComment,
+  addFooter,
+  addHeader,
+  createDocx,
+  findTextEverywhere,
+  fromBlob,
+  paragraphs,
+  text,
+  toBlob,
+} from "./docx.js";
 
 describe("Docx.findTextEverywhere", () => {
   it("returns hits in body, header, footer, and comments", () => {
-    const doc = Docx.create({ paragraphs: ["body has {{name}}"] });
-    const para = doc.paragraphs[0];
+    const doc = createDocx({ paragraphs: ["body has {{name}}"] });
+    const para = paragraphs(doc)[0];
     if (!para) return;
-    doc.addHeader("Header: {{name}}");
-    doc.addFooter("Footer: {{name}}");
-    doc.addComment(para, { author: "R", text: "Update {{name}}." });
+    addHeader(doc, "Header: {{name}}");
+    addFooter(doc, "Footer: {{name}}");
+    addComment(doc, para, { author: "R", text: "Update {{name}}." });
 
-    const results = doc.findTextEverywhere("{{name}}");
+    const results = findTextEverywhere(doc, "{{name}}");
     const partNames = results.map((r) => r.partName);
     expect(partNames).toContain("/word/document.xml");
     expect(partNames).toContain("/word/header1.xml");
@@ -22,15 +32,15 @@ describe("Docx.findTextEverywhere", () => {
   });
 
   it("returns an empty list when nothing matches", () => {
-    const doc = Docx.create({ paragraphs: ["hello world"] });
-    doc.addHeader("header");
-    expect(doc.findTextEverywhere("missing")).toEqual([]);
+    const doc = createDocx({ paragraphs: ["hello world"] });
+    addHeader(doc, "header");
+    expect(findTextEverywhere(doc, "missing")).toEqual([]);
   });
 
   it("supports regex queries", () => {
-    const doc = Docx.create({ paragraphs: ["x {{a}} y"] });
-    doc.addFooter("footer {{b}}");
-    const results = doc.findTextEverywhere(/\{\{(\w+)\}\}/g);
+    const doc = createDocx({ paragraphs: ["x {{a}} y"] });
+    addFooter(doc, "footer {{b}}");
+    const results = findTextEverywhere(doc, /\{\{(\w+)\}\}/g);
     const flat = results.flatMap((r) => r.matches.map((m) => m.captures[0]));
     expect(flat).toEqual(expect.arrayContaining(["a", "b"]));
   });
@@ -38,9 +48,9 @@ describe("Docx.findTextEverywhere", () => {
 
 describe("Docx.fromBlob", () => {
   it("loads a docx from a Blob", async () => {
-    const doc = Docx.create({ paragraphs: ["Hello"] });
-    const blob = doc.toBlob();
-    const loaded = await Docx.fromBlob(blob);
-    expect(loaded.text).toBe("Hello");
+    const doc = createDocx({ paragraphs: ["Hello"] });
+    const blob = toBlob(doc);
+    const loaded = await fromBlob(blob);
+    expect(text(loaded)).toBe("Hello");
   });
 });

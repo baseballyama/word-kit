@@ -1,6 +1,14 @@
 import { getPart, writeOpcPackage } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import {
+  acceptAllRevisions,
+  createDocx,
+  openDocx,
+  rejectAllRevisions,
+  text,
+  toUint8Array,
+  type Docx,
+} from "./docx.js";
 
 function buildDocWithRevisions(): Docx {
   // Construct a document with both <w:ins> and <w:del> revisions.
@@ -24,50 +32,50 @@ function buildDocWithRevisions(): Docx {
   ].join("");
   // Embed into a real package by overwriting Docx.create's document.xml
   // with our crafted XML, then re-opening.
-  const seed = Docx.create({ paragraphs: [] });
+  const seed = createDocx({ paragraphs: [] });
   const docPart = getPart(seed.opc, "/word/document.xml");
   if (!docPart) throw new Error("no document part");
   docPart.data = new TextEncoder().encode(xml);
   const bytes = writeOpcPackage(seed.opc);
-  return Docx.open(bytes);
+  return openDocx(bytes);
 }
 
 describe("Docx.acceptAllRevisions", () => {
   it("keeps inserted text and drops deleted text", () => {
     const doc = buildDocWithRevisions();
-    const n = doc.acceptAllRevisions();
+    const n = acceptAllRevisions(doc);
     expect(n).toBeGreaterThan(0);
-    expect(doc.text).toBe("Before INSERTED middle  after");
+    expect(text(doc)).toBe("Before INSERTED middle  after");
   });
 
   it("survives save+reopen with accepted state intact", () => {
     const doc = buildDocWithRevisions();
-    doc.acceptAllRevisions();
-    const reopened = Docx.open(doc.toUint8Array());
-    expect(reopened.text).toBe("Before INSERTED middle  after");
+    acceptAllRevisions(doc);
+    const reopened = openDocx(toUint8Array(doc));
+    expect(text(reopened)).toBe("Before INSERTED middle  after");
   });
 });
 
 describe("Docx.rejectAllRevisions", () => {
   it("drops inserted text and keeps deleted text", () => {
     const doc = buildDocWithRevisions();
-    const n = doc.rejectAllRevisions();
+    const n = rejectAllRevisions(doc);
     expect(n).toBeGreaterThan(0);
-    expect(doc.text).toBe("Before  middle DELETED after");
+    expect(text(doc)).toBe("Before  middle DELETED after");
   });
 
   it("survives save+reopen with rejected state intact", () => {
     const doc = buildDocWithRevisions();
-    doc.rejectAllRevisions();
-    const reopened = Docx.open(doc.toUint8Array());
-    expect(reopened.text).toBe("Before  middle DELETED after");
+    rejectAllRevisions(doc);
+    const reopened = openDocx(toUint8Array(doc));
+    expect(text(reopened)).toBe("Before  middle DELETED after");
   });
 });
 
 describe("revisions: empty document is a no-op", () => {
   it("returns 0 when nothing to accept", () => {
-    const doc = Docx.create({ paragraphs: ["plain text"] });
-    expect(doc.acceptAllRevisions()).toBe(0);
-    expect(doc.rejectAllRevisions()).toBe(0);
+    const doc = createDocx({ paragraphs: ["plain text"] });
+    expect(acceptAllRevisions(doc)).toBe(0);
+    expect(rejectAllRevisions(doc)).toBe(0);
   });
 });

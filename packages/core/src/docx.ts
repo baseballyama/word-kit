@@ -22,7 +22,7 @@ import {
   writeOpcPackage,
 } from "@word-kit/opc";
 import {
-  acceptAllRevisions,
+  acceptAllRevisions as wmlAcceptAllRevisions,
   addSectPrFooterRef,
   addSectPrHeaderRef,
   APP_PROPERTIES_CONTENT_TYPE,
@@ -69,7 +69,7 @@ import {
   type WmlFootnotesPart,
   writeFootnotesPart,
   findStyle,
-  findText,
+  findText as wmlFindText,
   type HeaderFooterType,
   MINIMAL_STYLES_XML,
   numAbstractRef,
@@ -84,8 +84,8 @@ import {
   parseNumberingPart,
   parseStylesPart,
   parseWmlDocument,
-  rejectAllRevisions,
-  replaceText,
+  rejectAllRevisions as wmlRejectAllRevisions,
+  replaceText as wmlReplaceText,
   setSectPrPageMargins,
   setSectPrPageSize,
   sniffImageContentType,
@@ -173,2056 +173,2113 @@ export interface AddCommentOptions {
   readonly date?: string;
 }
 
-export class Docx {
-  private readonly pkg: OpcPackage;
-  private readonly docModel: WmlDocument;
-  private readonly partName: string;
-  private dirty = false;
-  private stylesCache: WmlStylesPart | undefined;
-  private stylesDirty = false;
-  private numberingCache: WmlNumberingPart | undefined;
-  private numberingDirty = false;
-  private commentsCache: WmlCommentsPart | undefined;
-  private commentsDirty = false;
-  private footnotesCache: WmlFootnotesPart | undefined;
-  private footnotesDirty = false;
-  private endnotesCache: WmlFootnotesPart | undefined;
-  private endnotesDirty = false;
+/**
+ * Plain data shape for a `.docx` document. Behaviour is provided by the
+ * standalone functions exported from this module (`createDocx`, `openDocx`,
+ * `appendParagraph`, `addTable`, …) so tree-shaking can drop any operation
+ * the caller does not import.
+ */
+export interface Docx {
+  opc: OpcPackage;
+  document: WmlDocument;
+  partName: string;
+  dirty: boolean;
+  stylesCache: WmlStylesPart | undefined;
+  stylesDirty: boolean;
+  numberingCache: WmlNumberingPart | undefined;
+  numberingDirty: boolean;
+  commentsCache: WmlCommentsPart | undefined;
+  commentsDirty: boolean;
+  footnotesCache: WmlFootnotesPart | undefined;
+  footnotesDirty: boolean;
+  endnotesCache: WmlFootnotesPart | undefined;
+  endnotesDirty: boolean;
+}
 
-  private constructor(pkg: OpcPackage, doc: WmlDocument, partName: string) {
-    this.pkg = pkg;
-    this.docModel = doc;
-    this.partName = partName;
+function makeDocx(opc: OpcPackage, document: WmlDocument, partName: string): Docx {
+  return {
+    opc,
+    document,
+    partName,
+    dirty: false,
+    stylesCache: undefined,
+    stylesDirty: false,
+    numberingCache: undefined,
+    numberingDirty: false,
+    commentsCache: undefined,
+    commentsDirty: false,
+    footnotesCache: undefined,
+    footnotesDirty: false,
+    endnotesCache: undefined,
+    endnotesDirty: false,
+  };
+}
+
+/** Parse an existing `.docx` package. */
+export function openDocx(bytes: Uint8Array): Docx {
+  const pkg = readOpcPackage(bytes);
+  const part = findMainDocumentPart(pkg);
+  if (!part) {
+    throw new Error("Package has no main WordprocessingML document part");
   }
+  const xml = new TextDecoder("utf-8").decode(part.data);
+  const wml = parseWmlDocument(parseXml(xml));
+  return makeDocx(pkg, wml, part.name);
+}
 
-  /** Parse an existing `.docx` package. */
-  static open(bytes: Uint8Array): Docx {
-    const pkg = readOpcPackage(bytes);
-    const part = findMainDocumentPart(pkg);
-    if (!part) {
-      throw new Error("Package has no main WordprocessingML document part");
+/**
+ * Convenience for browser-side callers: open a `.docx` from a `Blob` or
+ * `File`. Awaits the underlying `ArrayBuffer` and delegates to
+ * {@link Docx.open}.
+ */
+export async function fromBlob(blob: Blob): Promise<Docx> {
+  const buf = await blob.arrayBuffer();
+  return openDocx(new Uint8Array(buf));
+}
+
+/**
+ * Return one entry per header part referenced by `document.xml`. Each
+ * entry includes the part name, the relationship id, and the plain-text
+ * content extracted from the part.
+ */
+export function headers(doc: Docx): Array<{ partName: string; relId: string; text: string }> {
+  return collectHeaderFooterParts(doc, WML_RELATIONSHIPS.header);
+}
+
+/** Same shape as {@link headers} but for footer parts. */
+export function footers(doc: Docx): Array<{ partName: string; relId: string; text: string }> {
+  return collectHeaderFooterParts(doc, WML_RELATIONSHIPS.footer);
+}
+
+/**
+ * Enumerate every named bookmark in the body. Each entry includes the
+ * bookmark name, its numeric id, and the paragraph that contains the
+ * `<w:bookmarkStart>`.
+ */
+export function bookmarks(doc: Docx): Array<{ name: string; id: number; paragraph: WmlParagraph }> {
+  const out: Array<{ name: string; id: number; paragraph: WmlParagraph }> = [];
+  for (const block of doc.document.body.blocks) {
+    if (block.kind !== "paragraph") continue;
+    for (const child of block.children) {
+      if (child.kind !== "raw") continue;
+      if (child.node.name.uri !== WML_NS) continue;
+      if (child.node.name.local !== "bookmarkStart") continue;
+      const idAttr = child.node.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id");
+      const nameAttr = child.node.attrs.find(
+        (a) => a.name.uri === WML_NS && a.name.local === "name",
+      );
+      if (!idAttr || !nameAttr) continue;
+      const id = Number.parseInt(idAttr.value, 10);
+      if (!Number.isFinite(id)) continue;
+      out.push({ id, name: nameAttr.value, paragraph: block });
     }
-    const xml = new TextDecoder("utf-8").decode(part.data);
-    const wml = parseWmlDocument(parseXml(xml));
-    return new Docx(pkg, wml, part.name);
   }
+  return out;
+}
 
-  /**
-   * Convenience for browser-side callers: open a `.docx` from a `Blob` or
-   * `File`. Awaits the underlying `ArrayBuffer` and delegates to
-   * {@link Docx.open}.
-   */
-  static async fromBlob(blob: Blob): Promise<Docx> {
-    const buf = await blob.arrayBuffer();
-    return Docx.open(new Uint8Array(buf));
-  }
-
-  /**
-   * Return one entry per header part referenced by `document.xml`. Each
-   * entry includes the part name, the relationship id, and the plain-text
-   * content extracted from the part.
-   */
-  get headers(): Array<{ partName: string; relId: string; text: string }> {
-    return this.collectHeaderFooterParts(WML_RELATIONSHIPS.header);
-  }
-
-  /** Same shape as {@link headers} but for footer parts. */
-  get footers(): Array<{ partName: string; relId: string; text: string }> {
-    return this.collectHeaderFooterParts(WML_RELATIONSHIPS.footer);
-  }
-
-  /**
-   * Enumerate every named bookmark in the body. Each entry includes the
-   * bookmark name, its numeric id, and the paragraph that contains the
-   * `<w:bookmarkStart>`.
-   */
-  get bookmarks(): Array<{ name: string; id: number; paragraph: WmlParagraph }> {
-    const out: Array<{ name: string; id: number; paragraph: WmlParagraph }> = [];
-    for (const block of this.docModel.body.blocks) {
-      if (block.kind !== "paragraph") continue;
-      for (const child of block.children) {
-        if (child.kind !== "raw") continue;
-        if (child.node.name.uri !== WML_NS) continue;
-        if (child.node.name.local !== "bookmarkStart") continue;
-        const idAttr = child.node.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id");
+/**
+ * Remove a bookmark by name. Strips both the `<w:bookmarkStart>` and
+ * `<w:bookmarkEnd>` markers (matched by the start's id). Returns true if
+ * a bookmark with that name was found and removed.
+ */
+export function removeBookmark(doc: Docx, name: string): boolean {
+  let removedId: number | undefined;
+  const checkRemoveStart = (children: WmlInline[]): WmlInline[] => {
+    return children.filter((child) => {
+      if (
+        child.kind === "raw" &&
+        child.node.name.uri === WML_NS &&
+        child.node.name.local === "bookmarkStart"
+      ) {
         const nameAttr = child.node.attrs.find(
           (a) => a.name.uri === WML_NS && a.name.local === "name",
         );
-        if (!idAttr || !nameAttr) continue;
-        const id = Number.parseInt(idAttr.value, 10);
-        if (!Number.isFinite(id)) continue;
-        out.push({ id, name: nameAttr.value, paragraph: block });
-      }
-    }
-    return out;
-  }
-
-  /**
-   * Remove a bookmark by name. Strips both the `<w:bookmarkStart>` and
-   * `<w:bookmarkEnd>` markers (matched by the start's id). Returns true if
-   * a bookmark with that name was found and removed.
-   */
-  removeBookmark(name: string): boolean {
-    let removedId: number | undefined;
-    const checkRemoveStart = (children: WmlInline[]): WmlInline[] => {
-      return children.filter((child) => {
-        if (
-          child.kind === "raw" &&
-          child.node.name.uri === WML_NS &&
-          child.node.name.local === "bookmarkStart"
-        ) {
-          const nameAttr = child.node.attrs.find(
-            (a) => a.name.uri === WML_NS && a.name.local === "name",
-          );
-          if (nameAttr?.value === name) {
-            const idAttr = child.node.attrs.find(
-              (a) => a.name.uri === WML_NS && a.name.local === "id",
-            );
-            if (idAttr) {
-              const n = Number.parseInt(idAttr.value, 10);
-              if (Number.isFinite(n)) removedId = n;
-            }
-            return false;
-          }
-        }
-        return true;
-      });
-    };
-    const checkRemoveEnd = (children: WmlInline[]): WmlInline[] => {
-      if (removedId === undefined) return children;
-      const targetId = String(removedId);
-      return children.filter((child) => {
-        if (
-          child.kind === "raw" &&
-          child.node.name.uri === WML_NS &&
-          child.node.name.local === "bookmarkEnd"
-        ) {
+        if (nameAttr?.value === name) {
           const idAttr = child.node.attrs.find(
             (a) => a.name.uri === WML_NS && a.name.local === "id",
           );
-          return idAttr?.value !== targetId;
-        }
-        return true;
-      });
-    };
-    for (const block of this.docModel.body.blocks) {
-      if (block.kind !== "paragraph") continue;
-      block.children = checkRemoveStart(block.children);
-    }
-    if (removedId === undefined) return false;
-    for (const block of this.docModel.body.blocks) {
-      if (block.kind !== "paragraph") continue;
-      block.children = checkRemoveEnd(block.children);
-    }
-    this.dirty = true;
-    return true;
-  }
-
-  /**
-   * Return one entry per media (image) part. Useful for inspecting which
-   * images a document already contains and feeding their bytes back into
-   * {@link replaceImage}.
-   */
-  get images(): Array<{ partName: string; contentType: string; data: Uint8Array }> {
-    const out: Array<{ partName: string; contentType: string; data: Uint8Array }> = [];
-    for (const part of listParts(this.pkg)) {
-      if (part.name.startsWith("/word/media/")) {
-        out.push({ partName: part.name, contentType: part.contentType, data: part.data });
-      }
-    }
-    return out;
-  }
-
-  /**
-   * Replace the bytes of an existing image part in place. The original
-   * relationships are kept, so every place in the document that referenced
-   * the image now points at the new bytes.
-   *
-   * Returns `true` if the part was found and updated, `false` otherwise.
-   */
-  replaceImage(partName: string, newBytes: Uint8Array): boolean {
-    const part = getPart(this.pkg, partName);
-    if (!part) return false;
-    part.data = newBytes;
-    return true;
-  }
-
-  private collectHeaderFooterParts(
-    relType: string,
-  ): Array<{ partName: string; relId: string; text: string }> {
-    const out: Array<{ partName: string; relId: string; text: string }> = [];
-    const docRels = partRelationships(this.pkg, this.partName);
-    for (const rel of relationshipsByType(docRels, relType)) {
-      if (rel.targetMode === "External") continue;
-      const partName = this.resolvePartTarget(rel.target);
-      const part = getPart(this.pkg, partName);
-      if (!part) continue;
-      const xml = new TextDecoder("utf-8").decode(part.data);
-      const xmlDoc = parseXml(xml);
-      const text = collectVisibleTextFromElement(xmlDoc.root);
-      out.push({ partName, relId: rel.id, text });
-    }
-    return out;
-  }
-
-  /** Create a fresh `.docx`. */
-  static create(options: DocxCreateOptions = {}): Docx {
-    const pkg = buildMinimalDocx();
-    const docPart = getPart(pkg, DOCUMENT_PART_FALLBACK);
-    if (!docPart) {
-      throw new Error("Minimal docx is missing /word/document.xml");
-    }
-    // Seed a minimal but valid styles.xml so the produced docx opens cleanly
-    // in both Word and LibreOffice without an "uses an unknown style" prompt.
-    addPart(pkg, {
-      name: STYLES_PART_NAME,
-      contentType: WML_CONTENT_TYPES.styles,
-      data: new TextEncoder().encode(MINIMAL_STYLES_XML),
-    });
-    const docRels = partRelationships(pkg, DOCUMENT_PART_FALLBACK);
-    addRelationship(docRels, { type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
-
-    const xml = new TextDecoder("utf-8").decode(docPart.data);
-    const wml = parseWmlDocument(parseXml(xml));
-    const docx = new Docx(pkg, wml, docPart.name);
-    if (options.paragraphs !== undefined) {
-      // Clear the seed empty paragraph; the caller is supplying the body.
-      wml.body.blocks.length = 0;
-      for (const text of options.paragraphs) {
-        docx.appendParagraph(text);
-      }
-    }
-    return docx;
-  }
-
-  /** The underlying OPC package. Mutations here bypass document-dirty tracking. */
-  get opc(): OpcPackage {
-    return this.pkg;
-  }
-
-  /** The parsed WordprocessingML AST of `word/document.xml`. */
-  get document(): WmlDocument {
-    return this.docModel;
-  }
-
-  /** Paragraph blocks in document order. */
-  get paragraphs(): readonly WmlParagraph[] {
-    return this.docModel.body.blocks.filter(isParagraph);
-  }
-
-  /** Table blocks in document order. */
-  get tables(): readonly WmlTable[] {
-    return this.docModel.body.blocks.filter(isTable);
-  }
-
-  /**
-   * Parsed `word/styles.xml` AST, or `undefined` if the package has no
-   * styles part. Lazily parsed on first access; subsequent mutations are
-   * flushed back on `toUint8Array()`.
-   */
-  get stylesPart(): WmlStylesPart | undefined {
-    if (this.stylesCache) return this.stylesCache;
-    const part = getPart(this.pkg, STYLES_PART_NAME);
-    if (!part) return undefined;
-    const xml = new TextDecoder("utf-8").decode(part.data);
-    this.stylesCache = parseStylesPart(parseXml(xml));
-    return this.stylesCache;
-  }
-
-  /**
-   * Add (or replace) a `<w:style>` entry. Creates `word/styles.xml` and
-   * its relationship if they do not already exist.
-   */
-  addStyle(options: BuildStyleOptions): void {
-    const part = this.ensureStylesPart();
-    const existing = findStyle(part, options.styleId);
-    const built = buildStyle(options);
-    if (existing) {
-      const idx = part.styles.indexOf(existing);
-      if (idx >= 0) part.styles[idx] = built;
-    } else {
-      part.styles.push(built);
-    }
-    this.stylesDirty = true;
-  }
-
-  /**
-   * Parsed `word/numbering.xml` AST, or `undefined` if absent. Lazy and
-   * cached just like {@link stylesPart}.
-   */
-  get numberingPart(): WmlNumberingPart | undefined {
-    if (this.numberingCache) return this.numberingCache;
-    const part = getPart(this.pkg, NUMBERING_PART_NAME);
-    if (!part) return undefined;
-    const xml = new TextDecoder("utf-8").decode(part.data);
-    this.numberingCache = parseNumberingPart(parseXml(xml));
-    return this.numberingCache;
-  }
-
-  /**
-   * Append a bullet list (one paragraph per item) to the body. Sets up
-   * `numbering.xml` and its relationship on first use.
-   */
-  addBulletList(items: readonly string[]): WmlParagraph[] {
-    const idValue = this.ensureBulletNumbering();
-    return items.map((text) => this.appendListParagraph(text, idValue));
-  }
-
-  /**
-   * Append a numbered list (one paragraph per item) to the body. Sets up
-   * `numbering.xml` and its relationship on first use.
-   */
-  addNumberedList(items: readonly string[]): WmlParagraph[] {
-    const idValue = this.ensureDecimalNumbering();
-    return items.map((text) => this.appendListParagraph(text, idValue));
-  }
-
-  /**
-   * Apply numbering to an existing paragraph (turn it into a list item).
-   * Use `numId` from one of `addBulletList` / `addNumberedList` / a value
-   * found via `docx.numberingPart`.
-   */
-  applyListToParagraph(paragraph: WmlParagraph, numId: number, ilvl = 0): void {
-    const pPr = paragraph.pPr;
-    if (!pPr) {
-      paragraph.pPr = buildPPrWithNumPr(numId, ilvl);
-    } else {
-      // Replace any existing <w:numPr> with the new one.
-      const existing = pPr.children.findIndex(
-        (c) => c.kind === "element" && c.name.local === "numPr",
-      );
-      const numPr = buildPPrWithNumPr(numId, ilvl).children.find(
-        (c) => c.kind === "element" && c.name.local === "numPr",
-      );
-      if (numPr && numPr.kind === "element") {
-        const children = pPr.children as XmlElement[];
-        if (existing >= 0) children[existing] = numPr;
-        else children.push(numPr);
-      }
-    }
-    this.dirty = true;
-  }
-
-  private appendListParagraph(text: string, numIdValue: number): WmlParagraph {
-    const piece: WmlRunPiece = {
-      kind: "text",
-      value: text,
-      preserveSpace: /^\s|\s$/.test(text),
-    };
-    const run: WmlRun = { kind: "run", pieces: [piece], extras: [] };
-    const paragraph: WmlParagraph = {
-      kind: "paragraph",
-      pPr: buildPPrWithNumPr(numIdValue, 0),
-      children: [run],
-      extras: [],
-    };
-    this.docModel.body.blocks.push(paragraph);
-    this.dirty = true;
-    return paragraph;
-  }
-
-  private ensureBulletNumbering(): number {
-    return this.ensureNumberingDefinition(BULLET_ABSTRACT_NUM_ID, bulletAbstractNumLevels);
-  }
-
-  private ensureDecimalNumbering(): number {
-    return this.ensureNumberingDefinition(DECIMAL_ABSTRACT_NUM_ID, decimalAbstractNumLevels);
-  }
-
-  private ensureNumberingDefinition(
-    abstractNumIdValue: number,
-    levelsFactory: () => Array<{
-      ilvl: number;
-      numFmt: "bullet" | "decimal" | string;
-      lvlText: string;
-    }>,
-  ): number {
-    const part = this.ensureNumberingPart();
-    const hasAbstract = part.abstractNums.some(
-      (a) =>
-        a.attrs.find((x) => x.name.uri === WML_NS && x.name.local === "abstractNumId")?.value ===
-        String(abstractNumIdValue),
-    );
-    if (!hasAbstract) {
-      part.abstractNums.push(
-        buildAbstractNum({
-          abstractNumId: abstractNumIdValue,
-          levels: levelsFactory() as never,
-        }),
-      );
-      this.numberingDirty = true;
-    }
-    // Find an existing num pointing to this abstractNumId; otherwise add one.
-    let chosenId: number | undefined;
-    for (const n of part.nums) {
-      if (numAbstractRef(n) === abstractNumIdValue) {
-        chosenId = readNumId(n);
-        if (chosenId !== undefined) break;
-      }
-    }
-    if (chosenId === undefined) {
-      const used = new Set<number>();
-      for (const n of part.nums) {
-        const id = readNumId(n);
-        if (id !== undefined) used.add(id);
-      }
-      let next = 1;
-      while (used.has(next)) next++;
-      part.nums.push(buildNum(next, abstractNumIdValue));
-      this.numberingDirty = true;
-      chosenId = next;
-    }
-    return chosenId;
-  }
-
-  private ensureNumberingPart(): WmlNumberingPart {
-    const existing = this.numberingPart;
-    if (existing) return existing;
-    addPart(this.pkg, {
-      name: NUMBERING_PART_NAME,
-      contentType: WML_CONTENT_TYPES.numbering,
-      data: new TextEncoder().encode(EMPTY_NUMBERING_XML),
-    });
-    const docRels = partRelationships(this.pkg, this.partName);
-    if (relationshipsByType(docRels, WML_RELATIONSHIPS.numbering).length === 0) {
-      addRelationship(docRels, { type: WML_RELATIONSHIPS.numbering, target: "numbering.xml" });
-    }
-    const xml = new TextDecoder("utf-8").decode(
-      getPart(this.pkg, NUMBERING_PART_NAME)?.data ?? new Uint8Array(),
-    );
-    this.numberingCache = parseNumberingPart(parseXml(xml));
-    this.numberingDirty = true;
-    return this.numberingCache;
-  }
-
-  private ensureStylesPart(): WmlStylesPart {
-    const existing = this.stylesPart;
-    if (existing) return existing;
-    addPart(this.pkg, {
-      name: STYLES_PART_NAME,
-      contentType: WML_CONTENT_TYPES.styles,
-      data: new TextEncoder().encode(MINIMAL_STYLES_XML),
-    });
-    const docRels = partRelationships(this.pkg, this.partName);
-    const hasStylesRel = relationshipsByType(docRels, WML_RELATIONSHIPS.styles).length > 0;
-    if (!hasStylesRel) {
-      addRelationship(docRels, { type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
-    }
-    const xml = new TextDecoder("utf-8").decode(
-      getPart(this.pkg, STYLES_PART_NAME)?.data ?? new Uint8Array(),
-    );
-    this.stylesCache = parseStylesPart(parseXml(xml));
-    this.stylesDirty = true;
-    return this.stylesCache;
-  }
-
-  /**
-   * Append a table to the body. `rows` is a row-major matrix of strings;
-   * each cell becomes a single paragraph with a single run containing the
-   * supplied text. Empty cells are allowed.
-   */
-  addTable(rows: ReadonlyArray<ReadonlyArray<string>>, options: BuildTableOptions = {}): WmlTable {
-    const table = buildTextTable(rows, options);
-    this.docModel.body.blocks.push(table);
-    this.dirty = true;
-    return table;
-  }
-
-  /** Search the document body for all matches of `query`. */
-  findText(query: string | RegExp): TextMatch[] {
-    return findText(this.docModel, query);
-  }
-
-  /**
-   * Find every occurrence of `query` across the body and all
-   * header/footer/comment/footnote/endnote parts. Returns an array of
-   * `{ partName, matches }` entries (the body uses `"/word/document.xml"`).
-   *
-   * Useful for inspecting a template before calling
-   * {@link replaceTextEverywhere}.
-   */
-  findTextEverywhere(query: string | RegExp): Array<{
-    partName: string;
-    matches: TextMatch[];
-  }> {
-    const out: Array<{ partName: string; matches: TextMatch[] }> = [];
-    const bodyMatches = findText(this.docModel, query);
-    if (bodyMatches.length > 0) {
-      out.push({ partName: this.partName, matches: bodyMatches });
-    }
-    // Flush dirty side-parts so the XML walk sees their current state.
-    if (this.commentsDirty && this.commentsCache) {
-      this.flushComments(this.commentsCache);
-      this.commentsDirty = false;
-      this.commentsCache = undefined;
-    }
-    if (this.footnotesDirty && this.footnotesCache) {
-      this.flushNotes(this.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
-      this.footnotesDirty = false;
-      this.footnotesCache = undefined;
-    }
-    if (this.endnotesDirty && this.endnotesCache) {
-      this.flushNotes(this.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
-      this.endnotesDirty = false;
-      this.endnotesCache = undefined;
-    }
-    const docRels = partRelationships(this.pkg, this.partName);
-    for (const rel of allRelationships(docRels)) {
-      if (rel.targetMode === "External") continue;
-      if (
-        rel.type !== WML_RELATIONSHIPS.header &&
-        rel.type !== WML_RELATIONSHIPS.footer &&
-        rel.type !== WML_RELATIONSHIPS.comments &&
-        rel.type !== WML_RELATIONSHIPS.footnotes &&
-        rel.type !== WML_RELATIONSHIPS.endnotes
-      )
-        continue;
-      const partName = this.resolvePartTarget(rel.target);
-      const part = getPart(this.pkg, partName);
-      if (!part) continue;
-      const xml = new TextDecoder("utf-8").decode(part.data);
-      const xmlDoc = parseXml(xml);
-      const matches: TextMatch[] = [];
-      const visit = (el: XmlElement): void => {
-        for (const child of el.children) {
-          if (!child || child.kind !== "element") continue;
-          if (child.name.uri === WML_NS && child.name.local === "p") {
-            const para = parseParagraph(child);
-            matches.push(
-              ...findText(
-                { rootAttrs: [], body: { blocks: [para], extras: [] }, extras: [] },
-                query,
-              ),
-            );
-          } else {
-            visit(child);
+          if (idAttr) {
+            const n = Number.parseInt(idAttr.value, 10);
+            if (Number.isFinite(n)) removedId = n;
           }
+          return false;
         }
-      };
-      visit(xmlDoc.root);
-      if (matches.length > 0) out.push({ partName, matches });
-    }
-    return out;
-  }
-
-  /**
-   * Replace every occurrence of `query`. Returns the number of replacements
-   * performed. Marks the document as dirty so the next `toUint8Array()`
-   * re-serializes the body.
-   */
-  replaceText(
-    query: string | RegExp,
-    replacement: string | ((match: TextMatch) => string),
-  ): number {
-    const count = replaceText(this.docModel, query, replacement);
-    if (count > 0) this.dirty = true;
-    return count;
-  }
-
-  /**
-   * Replace text everywhere it can appear inside the package: body, all
-   * headers, footers, footnotes, endnotes and comment bodies. Returns the
-   * total count of replacements across every part.
-   *
-   * Run-spanning matches are handled within each `<w:p>` individually
-   * (matches that span across paragraphs are not supported).
-   */
-  replaceTextEverywhere(
-    query: string | RegExp,
-    replacement: string | ((match: TextMatch) => string),
-  ): number {
-    // Flush any dirty in-memory parts to package bytes so the XML walk sees
-    // the latest state. We invalidate the caches afterwards so the next
-    // accessor reloads fresh.
-    if (this.commentsDirty && this.commentsCache) {
-      this.flushComments(this.commentsCache);
-      this.commentsDirty = false;
-      this.commentsCache = undefined;
-    }
-    if (this.footnotesDirty && this.footnotesCache) {
-      this.flushNotes(this.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
-      this.footnotesDirty = false;
-      this.footnotesCache = undefined;
-    }
-    if (this.endnotesDirty && this.endnotesCache) {
-      this.flushNotes(this.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
-      this.endnotesDirty = false;
-      this.endnotesCache = undefined;
-    }
-
-    let total = this.replaceText(query, replacement);
-
-    const partsToVisit = new Set<string>();
-    const docRels = partRelationships(this.pkg, this.partName);
-    for (const rel of allRelationships(docRels)) {
-      if (rel.targetMode === "External") continue;
-      if (
-        rel.type === WML_RELATIONSHIPS.header ||
-        rel.type === WML_RELATIONSHIPS.footer ||
-        rel.type === WML_RELATIONSHIPS.comments ||
-        rel.type === WML_RELATIONSHIPS.footnotes ||
-        rel.type === WML_RELATIONSHIPS.endnotes
-      ) {
-        partsToVisit.add(this.resolvePartTarget(rel.target));
       }
-    }
-
-    for (const partName of partsToVisit) {
-      total += this.replaceTextInPartXml(partName, query, replacement);
-    }
-    return total;
+      return true;
+    });
+  };
+  const checkRemoveEnd = (children: WmlInline[]): WmlInline[] => {
+    if (removedId === undefined) return children;
+    const targetId = String(removedId);
+    return children.filter((child) => {
+      if (
+        child.kind === "raw" &&
+        child.node.name.uri === WML_NS &&
+        child.node.name.local === "bookmarkEnd"
+      ) {
+        const idAttr = child.node.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id");
+        return idAttr?.value !== targetId;
+      }
+      return true;
+    });
+  };
+  for (const block of doc.document.body.blocks) {
+    if (block.kind !== "paragraph") continue;
+    block.children = checkRemoveStart(block.children);
   }
-
-  private resolvePartTarget(relTarget: string): string {
-    if (relTarget.startsWith("/")) return relTarget;
-    // Relative to /word/document.xml's folder (/word/).
-    return `/word/${relTarget}`;
+  if (removedId === undefined) return false;
+  for (const block of doc.document.body.blocks) {
+    if (block.kind !== "paragraph") continue;
+    block.children = checkRemoveEnd(block.children);
   }
+  doc.dirty = true;
+  return true;
+}
 
-  private replaceTextInPartXml(
-    partName: string,
-    query: string | RegExp,
-    replacement: string | ((match: TextMatch) => string),
-  ): number {
-    const part = getPart(this.pkg, partName);
-    if (!part) return 0;
-    const xmlText = new TextDecoder("utf-8").decode(part.data);
-    const xmlDoc = parseXml(xmlText);
-    let count = 0;
+/**
+ * Return one entry per media (image) part. Useful for inspecting which
+ * images a document already contains and feeding their bytes back into
+ * {@link replaceImage}.
+ */
+export function images(
+  doc: Docx,
+): Array<{ partName: string; contentType: string; data: Uint8Array }> {
+  const out: Array<{ partName: string; contentType: string; data: Uint8Array }> = [];
+  for (const part of listParts(doc.opc)) {
+    if (part.name.startsWith("/word/media/")) {
+      out.push({ partName: part.name, contentType: part.contentType, data: part.data });
+    }
+  }
+  return out;
+}
+
+/**
+ * Replace the bytes of an existing image part in place. The original
+ * relationships are kept, so every place in the document that referenced
+ * the image now points at the new bytes.
+ *
+ * Returns `true` if the part was found and updated, `false` otherwise.
+ */
+export function replaceImage(doc: Docx, partName: string, newBytes: Uint8Array): boolean {
+  const part = getPart(doc.opc, partName);
+  if (!part) return false;
+  part.data = newBytes;
+  return true;
+}
+
+function collectHeaderFooterParts(
+  doc: Docx,
+  relType: string,
+): Array<{ partName: string; relId: string; text: string }> {
+  const out: Array<{ partName: string; relId: string; text: string }> = [];
+  const docRels = partRelationships(doc.opc, doc.partName);
+  for (const rel of relationshipsByType(docRels, relType)) {
+    if (rel.targetMode === "External") continue;
+    const partName = resolvePartTarget(doc, rel.target);
+    const part = getPart(doc.opc, partName);
+    if (!part) continue;
+    const xml = new TextDecoder("utf-8").decode(part.data);
+    const xmlDoc = parseXml(xml);
+    const text = collectVisibleTextFromElement(xmlDoc.root);
+    out.push({ partName, relId: rel.id, text });
+  }
+  return out;
+}
+
+/** Create a fresh `.docx`. */
+export function createDocx(options: DocxCreateOptions = {}): Docx {
+  const pkg = buildMinimalDocx();
+  const docPart = getPart(pkg, DOCUMENT_PART_FALLBACK);
+  if (!docPart) {
+    throw new Error("Minimal docx is missing /word/document.xml");
+  }
+  // Seed a minimal but valid styles.xml so the produced docx opens cleanly
+  // in both Word and LibreOffice without an "uses an unknown style" prompt.
+  addPart(pkg, {
+    name: STYLES_PART_NAME,
+    contentType: WML_CONTENT_TYPES.styles,
+    data: new TextEncoder().encode(MINIMAL_STYLES_XML),
+  });
+  const docRels = partRelationships(pkg, DOCUMENT_PART_FALLBACK);
+  addRelationship(docRels, { type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
+
+  const xml = new TextDecoder("utf-8").decode(docPart.data);
+  const wml = parseWmlDocument(parseXml(xml));
+  const docx = makeDocx(pkg, wml, docPart.name);
+  if (options.paragraphs !== undefined) {
+    // Clear the seed empty paragraph; the caller is supplying the body.
+    wml.body.blocks.length = 0;
+    for (const text of options.paragraphs) {
+      appendParagraph(docx, text);
+    }
+  }
+  return docx;
+}
+
+/** Paragraph blocks in document order. */
+export function paragraphs(doc: Docx): readonly WmlParagraph[] {
+  return doc.document.body.blocks.filter(isParagraph);
+}
+
+/** Table blocks in document order. */
+export function tables(doc: Docx): readonly WmlTable[] {
+  return doc.document.body.blocks.filter(isTable);
+}
+
+/**
+ * Parsed `word/styles.xml` AST, or `undefined` if the package has no
+ * styles part. Lazily parsed on first access; subsequent mutations are
+ * flushed back on `toUint8Array()`.
+ */
+export function stylesPart(doc: Docx): WmlStylesPart | undefined {
+  if (doc.stylesCache) return doc.stylesCache;
+  const part = getPart(doc.opc, STYLES_PART_NAME);
+  if (!part) return undefined;
+  const xml = new TextDecoder("utf-8").decode(part.data);
+  doc.stylesCache = parseStylesPart(parseXml(xml));
+  return doc.stylesCache;
+}
+
+/**
+ * Add (or replace) a `<w:style>` entry. Creates `word/styles.xml` and
+ * its relationship if they do not already exist.
+ */
+export function addStyle(doc: Docx, options: BuildStyleOptions): void {
+  const part = ensureStylesPart(doc);
+  const existing = findStyle(part, options.styleId);
+  const built = buildStyle(options);
+  if (existing) {
+    const idx = part.styles.indexOf(existing);
+    if (idx >= 0) part.styles[idx] = built;
+  } else {
+    part.styles.push(built);
+  }
+  doc.stylesDirty = true;
+}
+
+/**
+ * Parsed `word/numbering.xml` AST, or `undefined` if absent. Lazy and
+ * cached just like {@link stylesPart}.
+ */
+export function numberingPart(doc: Docx): WmlNumberingPart | undefined {
+  if (doc.numberingCache) return doc.numberingCache;
+  const part = getPart(doc.opc, NUMBERING_PART_NAME);
+  if (!part) return undefined;
+  const xml = new TextDecoder("utf-8").decode(part.data);
+  doc.numberingCache = parseNumberingPart(parseXml(xml));
+  return doc.numberingCache;
+}
+
+/**
+ * Append a bullet list (one paragraph per item) to the body. Sets up
+ * `numbering.xml` and its relationship on first use.
+ */
+export function addBulletList(doc: Docx, items: readonly string[]): WmlParagraph[] {
+  const idValue = ensureBulletNumbering(doc);
+  return items.map((text) => appendListParagraph(doc, text, idValue));
+}
+
+/**
+ * Append a numbered list (one paragraph per item) to the body. Sets up
+ * `numbering.xml` and its relationship on first use.
+ */
+export function addNumberedList(doc: Docx, items: readonly string[]): WmlParagraph[] {
+  const idValue = ensureDecimalNumbering(doc);
+  return items.map((text) => appendListParagraph(doc, text, idValue));
+}
+
+/**
+ * Apply numbering to an existing paragraph (turn it into a list item).
+ * Use `numId` from one of `addBulletList` / `addNumberedList` / a value
+ * found via `docx.numberingPart`.
+ */
+export function applyListToParagraph(
+  doc: Docx,
+  paragraph: WmlParagraph,
+  numId: number,
+  ilvl = 0,
+): void {
+  const pPr = paragraph.pPr;
+  if (!pPr) {
+    paragraph.pPr = buildPPrWithNumPr(numId, ilvl);
+  } else {
+    // Replace any existing <w:numPr> with the new one.
+    const existing = pPr.children.findIndex(
+      (c) => c.kind === "element" && c.name.local === "numPr",
+    );
+    const numPr = buildPPrWithNumPr(numId, ilvl).children.find(
+      (c) => c.kind === "element" && c.name.local === "numPr",
+    );
+    if (numPr && numPr.kind === "element") {
+      const children = pPr.children as XmlElement[];
+      if (existing >= 0) children[existing] = numPr;
+      else children.push(numPr);
+    }
+  }
+  doc.dirty = true;
+}
+
+function appendListParagraph(doc: Docx, text: string, numIdValue: number): WmlParagraph {
+  const piece: WmlRunPiece = {
+    kind: "text",
+    value: text,
+    preserveSpace: /^\s|\s$/.test(text),
+  };
+  const run: WmlRun = { kind: "run", pieces: [piece], extras: [] };
+  const paragraph: WmlParagraph = {
+    kind: "paragraph",
+    pPr: buildPPrWithNumPr(numIdValue, 0),
+    children: [run],
+    extras: [],
+  };
+  doc.document.body.blocks.push(paragraph);
+  doc.dirty = true;
+  return paragraph;
+}
+
+function ensureBulletNumbering(doc: Docx): number {
+  return ensureNumberingDefinition(doc, BULLET_ABSTRACT_NUM_ID, bulletAbstractNumLevels);
+}
+
+function ensureDecimalNumbering(doc: Docx): number {
+  return ensureNumberingDefinition(doc, DECIMAL_ABSTRACT_NUM_ID, decimalAbstractNumLevels);
+}
+
+function ensureNumberingDefinition(
+  doc: Docx,
+  abstractNumIdValue: number,
+  levelsFactory: () => Array<{
+    ilvl: number;
+    numFmt: "bullet" | "decimal" | string;
+    lvlText: string;
+  }>,
+): number {
+  const part = ensureNumberingPart(doc);
+  const hasAbstract = part.abstractNums.some(
+    (a) =>
+      a.attrs.find((x) => x.name.uri === WML_NS && x.name.local === "abstractNumId")?.value ===
+      String(abstractNumIdValue),
+  );
+  if (!hasAbstract) {
+    part.abstractNums.push(
+      buildAbstractNum({
+        abstractNumId: abstractNumIdValue,
+        levels: levelsFactory() as never,
+      }),
+    );
+    doc.numberingDirty = true;
+  }
+  // Find an existing num pointing to this abstractNumId; otherwise add one.
+  let chosenId: number | undefined;
+  for (const n of part.nums) {
+    if (numAbstractRef(n) === abstractNumIdValue) {
+      chosenId = readNumId(n);
+      if (chosenId !== undefined) break;
+    }
+  }
+  if (chosenId === undefined) {
+    const used = new Set<number>();
+    for (const n of part.nums) {
+      const id = readNumId(n);
+      if (id !== undefined) used.add(id);
+    }
+    let next = 1;
+    while (used.has(next)) next++;
+    part.nums.push(buildNum(next, abstractNumIdValue));
+    doc.numberingDirty = true;
+    chosenId = next;
+  }
+  return chosenId;
+}
+
+function ensureNumberingPart(doc: Docx): WmlNumberingPart {
+  const existing = numberingPart(doc);
+  if (existing) return existing;
+  addPart(doc.opc, {
+    name: NUMBERING_PART_NAME,
+    contentType: WML_CONTENT_TYPES.numbering,
+    data: new TextEncoder().encode(EMPTY_NUMBERING_XML),
+  });
+  const docRels = partRelationships(doc.opc, doc.partName);
+  if (relationshipsByType(docRels, WML_RELATIONSHIPS.numbering).length === 0) {
+    addRelationship(docRels, { type: WML_RELATIONSHIPS.numbering, target: "numbering.xml" });
+  }
+  const xml = new TextDecoder("utf-8").decode(
+    getPart(doc.opc, NUMBERING_PART_NAME)?.data ?? new Uint8Array(),
+  );
+  doc.numberingCache = parseNumberingPart(parseXml(xml));
+  doc.numberingDirty = true;
+  return doc.numberingCache;
+}
+
+function ensureStylesPart(doc: Docx): WmlStylesPart {
+  const existing = stylesPart(doc);
+  if (existing) return existing;
+  addPart(doc.opc, {
+    name: STYLES_PART_NAME,
+    contentType: WML_CONTENT_TYPES.styles,
+    data: new TextEncoder().encode(MINIMAL_STYLES_XML),
+  });
+  const docRels = partRelationships(doc.opc, doc.partName);
+  const hasStylesRel = relationshipsByType(docRels, WML_RELATIONSHIPS.styles).length > 0;
+  if (!hasStylesRel) {
+    addRelationship(docRels, { type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
+  }
+  const xml = new TextDecoder("utf-8").decode(
+    getPart(doc.opc, STYLES_PART_NAME)?.data ?? new Uint8Array(),
+  );
+  doc.stylesCache = parseStylesPart(parseXml(xml));
+  doc.stylesDirty = true;
+  return doc.stylesCache;
+}
+
+/**
+ * Append a table to the body. `rows` is a row-major matrix of strings;
+ * each cell becomes a single paragraph with a single run containing the
+ * supplied text. Empty cells are allowed.
+ */
+export function addTable(
+  doc: Docx,
+  rows: ReadonlyArray<ReadonlyArray<string>>,
+  options: BuildTableOptions = {},
+): WmlTable {
+  const table = buildTextTable(rows, options);
+  doc.document.body.blocks.push(table);
+  doc.dirty = true;
+  return table;
+}
+
+/** Search the document body for all matches of `query`. */
+export function findText(doc: Docx, query: string | RegExp): TextMatch[] {
+  return wmlFindText(doc.document, query);
+}
+
+/**
+ * Find every occurrence of `query` across the body and all
+ * header/footer/comment/footnote/endnote parts. Returns an array of
+ * `{ partName, matches }` entries (the body uses `"/word/document.xml"`).
+ *
+ * Useful for inspecting a template before calling
+ * {@link replaceTextEverywhere}.
+ */
+export function findTextEverywhere(
+  doc: Docx,
+  query: string | RegExp,
+): Array<{
+  partName: string;
+  matches: TextMatch[];
+}> {
+  const out: Array<{ partName: string; matches: TextMatch[] }> = [];
+  const bodyMatches = wmlFindText(doc.document, query);
+  if (bodyMatches.length > 0) {
+    out.push({ partName: doc.partName, matches: bodyMatches });
+  }
+  // Flush dirty side-parts so the XML walk sees their current state.
+  if (doc.commentsDirty && doc.commentsCache) {
+    flushComments(doc, doc.commentsCache);
+    doc.commentsDirty = false;
+    doc.commentsCache = undefined;
+  }
+  if (doc.footnotesDirty && doc.footnotesCache) {
+    flushNotes(doc, doc.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
+    doc.footnotesDirty = false;
+    doc.footnotesCache = undefined;
+  }
+  if (doc.endnotesDirty && doc.endnotesCache) {
+    flushNotes(doc, doc.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
+    doc.endnotesDirty = false;
+    doc.endnotesCache = undefined;
+  }
+  const docRels = partRelationships(doc.opc, doc.partName);
+  for (const rel of allRelationships(docRels)) {
+    if (rel.targetMode === "External") continue;
+    if (
+      rel.type !== WML_RELATIONSHIPS.header &&
+      rel.type !== WML_RELATIONSHIPS.footer &&
+      rel.type !== WML_RELATIONSHIPS.comments &&
+      rel.type !== WML_RELATIONSHIPS.footnotes &&
+      rel.type !== WML_RELATIONSHIPS.endnotes
+    )
+      continue;
+    const partName = resolvePartTarget(doc, rel.target);
+    const part = getPart(doc.opc, partName);
+    if (!part) continue;
+    const xml = new TextDecoder("utf-8").decode(part.data);
+    const xmlDoc = parseXml(xml);
+    const matches: TextMatch[] = [];
     const visit = (el: XmlElement): void => {
-      const children = el.children as XmlNode[];
-      for (let i = 0; i < children.length; i++) {
-        const child = children[i];
+      for (const child of el.children) {
         if (!child || child.kind !== "element") continue;
         if (child.name.uri === WML_NS && child.name.local === "p") {
           const para = parseParagraph(child);
-          const n = replaceInParagraph(para, query, replacement);
-          if (n > 0) {
-            children[i] = paragraphToElement(para);
-            count += n;
-          }
+          matches.push(
+            ...wmlFindText(
+              { rootAttrs: [], body: { blocks: [para], extras: [] }, extras: [] },
+              query,
+            ),
+          );
         } else {
           visit(child);
         }
       }
     };
     visit(xmlDoc.root);
-    if (count > 0) {
-      part.data = new TextEncoder().encode(serializeXml(xmlDoc));
+    if (matches.length > 0) out.push({ partName, matches });
+  }
+  return out;
+}
+
+/**
+ * Replace every occurrence of `query`. Returns the number of replacements
+ * performed. Marks the document as dirty so the next `toUint8Array()`
+ * re-serializes the body.
+ */
+export function replaceText(
+  doc: Docx,
+  query: string | RegExp,
+  replacement: string | ((match: TextMatch) => string),
+): number {
+  const count = wmlReplaceText(doc.document, query, replacement);
+  if (count > 0) doc.dirty = true;
+  return count;
+}
+
+/**
+ * Replace text everywhere it can appear inside the package: body, all
+ * headers, footers, footnotes, endnotes and comment bodies. Returns the
+ * total count of replacements across every part.
+ *
+ * Run-spanning matches are handled within each `<w:p>` individually
+ * (matches that span across paragraphs are not supported).
+ */
+export function replaceTextEverywhere(
+  doc: Docx,
+  query: string | RegExp,
+  replacement: string | ((match: TextMatch) => string),
+): number {
+  // Flush any dirty in-memory parts to package bytes so the XML walk sees
+  // the latest state. We invalidate the caches afterwards so the next
+  // accessor reloads fresh.
+  if (doc.commentsDirty && doc.commentsCache) {
+    flushComments(doc, doc.commentsCache);
+    doc.commentsDirty = false;
+    doc.commentsCache = undefined;
+  }
+  if (doc.footnotesDirty && doc.footnotesCache) {
+    flushNotes(doc, doc.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
+    doc.footnotesDirty = false;
+    doc.footnotesCache = undefined;
+  }
+  if (doc.endnotesDirty && doc.endnotesCache) {
+    flushNotes(doc, doc.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
+    doc.endnotesDirty = false;
+    doc.endnotesCache = undefined;
+  }
+
+  let total = replaceText(doc, query, replacement);
+
+  const partsToVisit = new Set<string>();
+  const docRels = partRelationships(doc.opc, doc.partName);
+  for (const rel of allRelationships(docRels)) {
+    if (rel.targetMode === "External") continue;
+    if (
+      rel.type === WML_RELATIONSHIPS.header ||
+      rel.type === WML_RELATIONSHIPS.footer ||
+      rel.type === WML_RELATIONSHIPS.comments ||
+      rel.type === WML_RELATIONSHIPS.footnotes ||
+      rel.type === WML_RELATIONSHIPS.endnotes
+    ) {
+      partsToVisit.add(resolvePartTarget(doc, rel.target));
     }
-    return count;
   }
 
-  /** Visible text of the document. Paragraphs are joined with `\n`. */
-  get text(): string {
-    return documentText(this.docModel);
+  for (const partName of partsToVisit) {
+    total += replaceTextInPartXml(doc, partName, query, replacement);
   }
+  return total;
+}
 
-  /**
-   * Append a section break paragraph. The paragraph terminates the current
-   * section; subsequent paragraphs belong to the new section. Page size /
-   * margins on the section break override the body trailing sectPr for
-   * everything from this point on.
-   */
-  appendSectionBreak(
-    type: "continuous" | "nextPage" | "evenPage" | "oddPage" | "nextColumn" = "nextPage",
-    options: { pageSize?: PageSize; pageMargins?: PageMargins } = {},
-  ): WmlParagraph {
-    const sectPrChildren: XmlElement[] = [
+function resolvePartTarget(doc: Docx, relTarget: string): string {
+  if (relTarget.startsWith("/")) return relTarget;
+  // Relative to /word/document.xml's folder (/word/).
+  return `/word/${relTarget}`;
+}
+
+function replaceTextInPartXml(
+  doc: Docx,
+  partName: string,
+  query: string | RegExp,
+  replacement: string | ((match: TextMatch) => string),
+): number {
+  const part = getPart(doc.opc, partName);
+  if (!part) return 0;
+  const xmlText = new TextDecoder("utf-8").decode(part.data);
+  const xmlDoc = parseXml(xmlText);
+  let count = 0;
+  const visit = (el: XmlElement): void => {
+    const children = el.children as XmlNode[];
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (!child || child.kind !== "element") continue;
+      if (child.name.uri === WML_NS && child.name.local === "p") {
+        const para = parseParagraph(child);
+        const n = replaceInParagraph(para, query, replacement);
+        if (n > 0) {
+          children[i] = paragraphToElement(para);
+          count += n;
+        }
+      } else {
+        visit(child);
+      }
+    }
+  };
+  visit(xmlDoc.root);
+  if (count > 0) {
+    part.data = new TextEncoder().encode(serializeXml(xmlDoc));
+  }
+  return count;
+}
+
+/** Visible text of the document. Paragraphs are joined with `\n`. */
+export function text(doc: Docx): string {
+  return documentText(doc.document);
+}
+
+/**
+ * Append a section break paragraph. The paragraph terminates the current
+ * section; subsequent paragraphs belong to the new section. Page size /
+ * margins on the section break override the body trailing sectPr for
+ * everything from this point on.
+ */
+export function appendSectionBreak(
+  doc: Docx,
+  type: "continuous" | "nextPage" | "evenPage" | "oddPage" | "nextColumn" = "nextPage",
+  options: { pageSize?: PageSize; pageMargins?: PageMargins } = {},
+): WmlParagraph {
+  const sectPrChildren: XmlElement[] = [
+    {
+      kind: "element",
+      name: { uri: WML_NS, local: "type", prefix: "w" },
+      attrs: [
+        { name: { uri: WML_NS, local: "val", prefix: "w" }, value: type, isNamespaceDecl: false },
+      ],
+      children: [],
+      xmlSpace: "default",
+      selfClosing: true,
+    },
+  ];
+  if (options.pageSize) {
+    sectPrChildren.push(buildPgSzElement(options.pageSize));
+  }
+  if (options.pageMargins) {
+    sectPrChildren.push(buildPgMarElement(options.pageMargins));
+  }
+  const sectPr: XmlElement = {
+    kind: "element",
+    name: { uri: WML_NS, local: "sectPr", prefix: "w" },
+    attrs: [],
+    children: sectPrChildren,
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  const pPr: XmlElement = {
+    kind: "element",
+    name: { uri: WML_NS, local: "pPr", prefix: "w" },
+    attrs: [],
+    children: [sectPr],
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  const paragraph: WmlParagraph = {
+    kind: "paragraph",
+    pPr,
+    children: [],
+    extras: [],
+  };
+  doc.document.body.blocks.push(paragraph);
+  doc.dirty = true;
+  return paragraph;
+}
+
+/**
+ * Insert a new text paragraph at the given paragraph-relative index.
+ * `index` counts only paragraphs (so `0` means "before the first
+ * paragraph"); other body block kinds are skipped past. If `index` is
+ * past the end of the existing paragraphs, the new paragraph is
+ * appended.
+ */
+export function insertParagraphAt(
+  doc: Docx,
+  index: number,
+  text: string,
+  options: AppendParagraphOptions = {},
+): WmlParagraph {
+  let count = 0;
+  let blockInsertAt = doc.document.body.blocks.length;
+  for (let i = 0; i < doc.document.body.blocks.length; i++) {
+    const b = doc.document.body.blocks[i];
+    if (b?.kind === "paragraph") {
+      if (count === index) {
+        blockInsertAt = i;
+        break;
+      }
+      count++;
+    }
+  }
+  // Build the paragraph using the same logic as appendParagraph by
+  // calling it temporarily, then moving the newly-pushed paragraph into
+  // place.
+  const para = appendParagraph(doc, text, options);
+  const lastIdx = doc.document.body.blocks.length - 1;
+  if (lastIdx !== blockInsertAt) {
+    doc.document.body.blocks.splice(lastIdx, 1);
+    doc.document.body.blocks.splice(blockInsertAt, 0, para);
+  }
+  return para;
+}
+
+/** Remove the paragraph at `index` from the body. Returns true on success. */
+export function removeParagraph(doc: Docx, index: number): boolean {
+  let count = 0;
+  for (let i = 0; i < doc.document.body.blocks.length; i++) {
+    const b = doc.document.body.blocks[i];
+    if (b?.kind === "paragraph") {
+      if (count === index) {
+        doc.document.body.blocks.splice(i, 1);
+        doc.dirty = true;
+        return true;
+      }
+      count++;
+    }
+  }
+  return false;
+}
+
+/** Remove all body blocks (paragraphs and tables). The body sectPr is kept. */
+export function clearBody(doc: Docx): void {
+  doc.document.body.blocks.length = 0;
+  doc.dirty = true;
+}
+
+/**
+ * Remove every image part (`/word/media/*`), drop matching image
+ * relationships, and strip `<w:drawing>` runs from the body. Returns
+ * the number of media parts removed.
+ */
+export function removeAllImages(doc: Docx): number {
+  const docRels = partRelationships(doc.opc, doc.partName);
+  let removed = 0;
+  for (const rel of relationshipsByType(docRels, WML_RELATIONSHIPS.image)) {
+    const partName = resolvePartTarget(doc, rel.target);
+    if (rel.targetMode !== "External" && removePart(doc.opc, partName)) removed++;
+    removeRelationship(docRels, rel.id);
+  }
+  const hasDrawing = (el: XmlElement): boolean => {
+    if (el.name.uri === WML_NS && el.name.local === "drawing") return true;
+    for (const c of el.children) {
+      if (c.kind === "element" && hasDrawing(c)) return true;
+    }
+    return false;
+  };
+  const stripDrawings = (p: WmlParagraph): void => {
+    p.children = p.children.filter((child) => {
+      if (child.kind === "raw") {
+        if (child.node.name.uri === WML_NS && child.node.name.local === "drawing") return false;
+        if (child.node.name.local === "r" && hasDrawing(child.node)) return false;
+      }
+      if (child.kind === "run") {
+        child.pieces = child.pieces.filter((piece) => piece.kind !== "drawing");
+      }
+      return true;
+    });
+  };
+  const walk = (blocks: WmlBlock[]): void => {
+    for (const b of blocks) {
+      if (b.kind === "paragraph") stripDrawings(b);
+      else if (b.kind === "table") {
+        for (const row of b.rows) {
+          for (const cell of row.cells) {
+            for (const p of cell.paragraphs) stripDrawings(p);
+          }
+        }
+      }
+    }
+  };
+  walk(doc.document.body.blocks);
+  if (removed > 0) doc.dirty = true;
+  return removed;
+}
+
+/** Remove every bookmark from the body. Returns the count removed. */
+export function removeAllBookmarks(doc: Docx): number {
+  const names = bookmarks(doc).map((b) => b.name);
+  let removed = 0;
+  for (const name of names) {
+    if (removeBookmark(doc, name)) removed++;
+  }
+  return removed;
+}
+
+/**
+ * Remove every header part and its references from the body's sectPr.
+ * Returns the number of header parts removed.
+ */
+export function removeAllHeaders(doc: Docx): number {
+  return removeAllHeaderFooterParts(doc, WML_RELATIONSHIPS.header, "headerReference");
+}
+
+/** Same shape as {@link removeAllHeaders} but for footer parts. */
+export function removeAllFooters(doc: Docx): number {
+  return removeAllHeaderFooterParts(doc, WML_RELATIONSHIPS.footer, "footerReference");
+}
+
+/**
+ * Remove every user footnote AND every `<w:footnoteReference>` run from
+ * the body. Keeps the standard separator / continuationSeparator entries
+ * intact. Returns the number of user footnotes removed.
+ */
+export function removeAllFootnotes(doc: Docx): number {
+  return removeAllNotes(doc, "footnote");
+}
+
+/** Same shape as {@link removeAllFootnotes} but for endnotes. */
+export function removeAllEndnotes(doc: Docx): number {
+  return removeAllNotes(doc, "endnote");
+}
+
+function removeAllNotes(doc: Docx, kind: "footnote" | "endnote"): number {
+  const part = kind === "footnote" ? footnotesPart(doc) : endnotesPart(doc);
+  if (!part) return 0;
+  let removed = 0;
+  const survivors: typeof part.footnotes = [];
+  for (const note of part.footnotes) {
+    const typeAttr = note.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "type");
+    if (
+      typeAttr &&
+      (typeAttr.value === "separator" || typeAttr.value === "continuationSeparator")
+    ) {
+      survivors.push(note);
+    } else {
+      removed++;
+    }
+  }
+  part.footnotes.length = 0;
+  for (const s of survivors) part.footnotes.push(s);
+  if (kind === "footnote") doc.footnotesDirty = true;
+  else doc.endnotesDirty = true;
+  // Strip <w:footnoteReference> / <w:endnoteReference> runs from body
+  // paragraphs.
+  const refLocal = kind === "footnote" ? "footnoteReference" : "endnoteReference";
+  const stripFromParagraph = (p: WmlParagraph): void => {
+    p.children = p.children.filter((child) => {
+      if (child.kind !== "raw") return true;
+      if (child.node.name.uri !== WML_NS) return true;
+      if (child.node.name.local !== "r") return true;
+      return !child.node.children.some(
+        (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === refLocal,
+      );
+    });
+  };
+  const walk = (blocks: WmlBlock[]): void => {
+    for (const b of blocks) {
+      if (b.kind === "paragraph") stripFromParagraph(b);
+      else if (b.kind === "table") {
+        for (const row of b.rows) {
+          for (const cell of row.cells) {
+            for (const p of cell.paragraphs) stripFromParagraph(p);
+          }
+        }
+      }
+    }
+  };
+  walk(doc.document.body.blocks);
+  if (removed > 0) doc.dirty = true;
+  return removed;
+}
+
+function removeAllHeaderFooterParts(doc: Docx, relType: string, refLocal: string): number {
+  let removed = 0;
+  const docRels = partRelationships(doc.opc, doc.partName);
+  for (const rel of relationshipsByType(docRels, relType)) {
+    const partName = resolvePartTarget(doc, rel.target);
+    if (removePart(doc.opc, partName)) removed++;
+    removeRelationship(docRels, rel.id);
+  }
+  // Strip *Reference children from the body's sectPr in place.
+  const sectPr = doc.document.body.sectPr;
+  if (sectPr) {
+    const arr = sectPr.children as XmlElement[];
+    let writeIdx = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const c = arr[i];
+      if (!c) continue;
+      if (c.kind === "element" && c.name.uri === WML_NS && c.name.local === refLocal) continue;
+      arr[writeIdx++] = c;
+    }
+    arr.length = writeIdx;
+  }
+  if (removed > 0) doc.dirty = true;
+  return removed;
+}
+
+/**
+ * Remove every comment from `comments.xml` AND every comment range
+ * marker and reference run from `document.xml`. Returns the number of
+ * comments removed.
+ */
+export function removeAllComments(doc: Docx): number {
+  const part = commentsPart(doc);
+  let removed = 0;
+  if (part) {
+    removed = part.comments.length;
+    part.comments.length = 0;
+    doc.commentsDirty = true;
+  }
+  // Strip commentRangeStart / commentRangeEnd / commentReference from the body.
+  const stripFromParagraph = (p: WmlParagraph): void => {
+    p.children = p.children.filter((child) => {
+      if (child.kind !== "raw") return true;
+      const local = child.node.name.local;
+      if (
+        child.node.name.uri === WML_NS &&
+        (local === "commentRangeStart" ||
+          local === "commentRangeEnd" ||
+          (local === "r" &&
+            child.node.children.some(
+              (c) =>
+                c.kind === "element" &&
+                c.name.uri === WML_NS &&
+                c.name.local === "commentReference",
+            )))
+      ) {
+        return false;
+      }
+      return true;
+    });
+  };
+  const walk = (blocks: WmlBlock[]): void => {
+    for (const b of blocks) {
+      if (b.kind === "paragraph") stripFromParagraph(b);
+      else if (b.kind === "table") {
+        for (const row of b.rows) {
+          for (const cell of row.cells) {
+            for (const p of cell.paragraphs) stripFromParagraph(p);
+          }
+        }
+      }
+    }
+  };
+  walk(doc.document.body.blocks);
+  if (removed > 0) doc.dirty = true;
+  return removed;
+}
+
+/**
+ * Append a paragraph whose only content is a page break. Equivalent to
+ * Ctrl+Enter in Word.
+ */
+export function appendPageBreak(doc: Docx): WmlParagraph {
+  const piece: WmlRunPiece = { kind: "break", breakType: "page" };
+  const run: WmlRun = { kind: "run", pieces: [piece], extras: [] };
+  const paragraph: WmlParagraph = { kind: "paragraph", children: [run], extras: [] };
+  doc.document.body.blocks.push(paragraph);
+  doc.dirty = true;
+  return paragraph;
+}
+
+/**
+ * Add a named bookmark covering a paragraph. Returns the assigned numeric
+ * bookmark id; the same name must not be reused without removing the
+ * existing bookmark first (Word will deduplicate silently otherwise).
+ */
+export function addBookmark(doc: Docx, name: string, paragraph: WmlParagraph): number {
+  const id = allocateBookmarkId(doc);
+  const start: XmlElement = {
+    kind: "element",
+    name: { uri: WML_NS, local: "bookmarkStart", prefix: "w" },
+    attrs: [
+      {
+        name: { uri: WML_NS, local: "id", prefix: "w" },
+        value: String(id),
+        isNamespaceDecl: false,
+      },
+      { name: { uri: WML_NS, local: "name", prefix: "w" }, value: name, isNamespaceDecl: false },
+    ],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: true,
+  };
+  const end: XmlElement = {
+    kind: "element",
+    name: { uri: WML_NS, local: "bookmarkEnd", prefix: "w" },
+    attrs: [
+      {
+        name: { uri: WML_NS, local: "id", prefix: "w" },
+        value: String(id),
+        isNamespaceDecl: false,
+      },
+    ],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: true,
+  };
+  paragraph.children = [
+    { kind: "raw", node: start },
+    ...paragraph.children,
+    { kind: "raw", node: end },
+  ];
+  doc.dirty = true;
+  return id;
+}
+
+/**
+ * Append a paragraph with a hyperlink that points at an internal bookmark.
+ */
+export function addInternalHyperlink(
+  doc: Docx,
+  bookmarkName: string,
+  text: string,
+  options: { tooltip?: string } = {},
+): WmlParagraph {
+  const hyperlinkEl = buildHyperlink({
+    anchor: bookmarkName,
+    runs: [buildHyperlinkRun(text)],
+    ...(options.tooltip !== undefined ? { tooltip: options.tooltip } : {}),
+  });
+  const paragraph: WmlParagraph = {
+    kind: "paragraph",
+    children: [{ kind: "raw", node: hyperlinkEl }],
+    extras: [],
+  };
+  doc.document.body.blocks.push(paragraph);
+  doc.dirty = true;
+  return paragraph;
+}
+
+function allocateBookmarkId(doc: Docx): number {
+  // Bookmarks are numbered uniquely per document; we scan existing IDs to
+  // avoid colliding with anything in the document.
+  let max = -1;
+  const scan = (el: XmlElement): void => {
+    if (
+      el.name.uri === WML_NS &&
+      (el.name.local === "bookmarkStart" || el.name.local === "bookmarkEnd")
+    ) {
+      const idAttr = el.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id");
+      if (idAttr) {
+        const n = Number.parseInt(idAttr.value, 10);
+        if (Number.isFinite(n) && n > max) max = n;
+      }
+    }
+    for (const c of el.children) {
+      if (c.kind === "element") scan(c);
+    }
+  };
+  // Walk all inline nodes in body to find existing bookmark ids.
+  for (const block of doc.document.body.blocks) {
+    if (block.kind === "paragraph") {
+      for (const child of block.children) {
+        if (child.kind === "raw") scan(child.node);
+      }
+    } else if (block.kind === "raw") {
+      scan(block.node);
+    }
+  }
+  return max + 1;
+}
+
+/**
+ * Append a paragraph containing a single external hyperlink. Creates an
+ * external relationship (TargetMode=External) for the URL and wraps a
+ * styled run inside `<w:hyperlink>`.
+ */
+export function addHyperlink(
+  doc: Docx,
+  url: string,
+  text: string,
+  options: { tooltip?: string } = {},
+): WmlParagraph {
+  const docRels = partRelationships(doc.opc, doc.partName);
+  const rel = addRelationship(docRels, {
+    type: WML_RELATIONSHIPS.hyperlink,
+    target: url,
+    targetMode: "External",
+  });
+  const hyperlinkEl = buildHyperlink({
+    relId: rel.id,
+    runs: [buildHyperlinkRun(text)],
+    ...(options.tooltip !== undefined ? { tooltip: options.tooltip } : {}),
+  });
+  const paragraph: WmlParagraph = {
+    kind: "paragraph",
+    children: [{ kind: "raw", node: hyperlinkEl }],
+    extras: [],
+  };
+  doc.document.body.blocks.push(paragraph);
+  doc.dirty = true;
+  return paragraph;
+}
+
+/**
+ * Accept every `<w:ins>` and `<w:del>` revision in the document.
+ * Insertions are kept and unwrapped; deletions are dropped. Returns the
+ * number of revisions resolved.
+ */
+export function acceptAllRevisions(doc: Docx): number {
+  const n = wmlAcceptAllRevisions(doc.document);
+  if (n > 0) doc.dirty = true;
+  return n;
+}
+
+/**
+ * Reject every `<w:ins>` and `<w:del>` revision in the document.
+ * Insertions are dropped; deletions are kept and unwrapped. Returns the
+ * number of revisions resolved.
+ */
+export function rejectAllRevisions(doc: Docx): number {
+  const n = wmlRejectAllRevisions(doc.document);
+  if (n > 0) doc.dirty = true;
+  return n;
+}
+
+/**
+ * Shortcut for `appendParagraph(text, { style: "Heading{level}" })`. Note
+ * that the referenced `HeadingN` style must be present in `styles.xml`
+ * for Word to render it as a heading — call {@link ensureHeadingStyles}
+ * once during setup if you want defaults to be defined automatically.
+ */
+export function appendHeading(doc: Docx, text: string, level = 1): WmlParagraph {
+  if (level < 1 || level > 9 || !Number.isInteger(level)) {
+    throw new Error(`Heading level must be an integer in 1..9, got ${level}`);
+  }
+  return appendParagraph(doc, text, { style: `Heading${level}` });
+}
+
+/**
+ * Ensure default `Heading1`..`Heading{maxLevel}` styles exist in
+ * `styles.xml`. Each missing style is added with sensible defaults
+ * (smaller / lighter as the level increases). Existing same-id styles
+ * are left untouched.
+ */
+export function ensureHeadingStyles(doc: Docx, maxLevel = 3): void {
+  const sizes = [40, 32, 28, 24, 22, 22, 22, 22, 22];
+  const colors = [
+    "1F497D",
+    "1F497D",
+    "4F81BD",
+    "4F81BD",
+    "8DB3E2",
+    "8DB3E2",
+    "8DB3E2",
+    "8DB3E2",
+    "8DB3E2",
+  ];
+  const part = stylesPart(doc);
+  for (let lvl = 1; lvl <= Math.min(maxLevel, 9); lvl++) {
+    const id = `Heading${lvl}`;
+    if (part?.styles.some((s) => s.attrs.some((a) => a.name.local === "styleId" && a.value === id)))
+      continue;
+    addStyle(doc, {
+      type: "paragraph",
+      styleId: id,
+      name: `heading ${lvl}`,
+      basedOn: "Normal",
+      next: "Normal",
+      qFormat: true,
+      uiPriority: 9,
+      bold: lvl <= 2,
+      fontSizeHalfPoints: sizes[lvl - 1] ?? 24,
+      color: colors[lvl - 1] ?? "1F497D",
+    });
+  }
+}
+
+/**
+ * Extract a document outline — every paragraph whose pStyle matches
+ * `Heading{level}`. Each entry includes the paragraph reference, the
+ * heading level (1-9), and the visible text.
+ */
+export function outline(
+  doc: Docx,
+): Array<{ paragraph: WmlParagraph; level: number; text: string }> {
+  const out: Array<{ paragraph: WmlParagraph; level: number; text: string }> = [];
+  for (const block of doc.document.body.blocks) {
+    if (block.kind !== "paragraph") continue;
+    const style = block.pPr?.children.find(
+      (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === "pStyle",
+    );
+    if (style?.kind !== "element") continue;
+    const styleId = style.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "val")?.value;
+    if (!styleId) continue;
+    const m = /^Heading(\d)$/.exec(styleId);
+    if (!m) continue;
+    const level = Number.parseInt(m[1] ?? "0", 10);
+    if (!Number.isFinite(level) || level < 1 || level > 9) continue;
+    out.push({ paragraph: block, level, text: documentTextOfParagraph(block) });
+  }
+  return out;
+}
+
+/** Append a paragraph containing a single text run to the body. */
+export function appendParagraph(
+  doc: Docx,
+  text: string,
+  options: AppendParagraphOptions = {},
+): WmlParagraph {
+  const piece: WmlRunPiece = {
+    kind: "text",
+    value: text,
+    preserveSpace: /^\s|\s$/.test(text),
+  };
+  const run: WmlRun =
+    options.bold || options.italic
+      ? {
+          kind: "run",
+          rPr: {
+            kind: "element",
+            name: { uri: WML_NS, local: "rPr", prefix: "w" },
+            attrs: [],
+            children: [
+              ...(options.bold ? [wmlEmptyEl("b")] : []),
+              ...(options.italic ? [wmlEmptyEl("i")] : []),
+            ],
+            xmlSpace: "default",
+            selfClosing: false,
+          },
+          pieces: [piece],
+          extras: [],
+        }
+      : {
+          kind: "run",
+          pieces: [piece],
+          extras: [],
+        };
+  const paragraph: WmlParagraph = options.style
+    ? {
+        kind: "paragraph",
+        pPr: {
+          kind: "element",
+          name: { uri: WML_NS, local: "pPr", prefix: "w" },
+          attrs: [],
+          children: [
+            {
+              kind: "element",
+              name: { uri: WML_NS, local: "pStyle", prefix: "w" },
+              attrs: [
+                {
+                  name: { uri: WML_NS, local: "val", prefix: "w" },
+                  value: options.style,
+                  isNamespaceDecl: false,
+                },
+              ],
+              children: [],
+              xmlSpace: "default",
+              selfClosing: true,
+            },
+          ],
+          xmlSpace: "default",
+          selfClosing: false,
+        },
+        children: [run],
+        extras: [],
+      }
+    : {
+        kind: "paragraph",
+        children: [run],
+        extras: [],
+      };
+  doc.document.body.blocks.push(paragraph);
+  doc.dirty = true;
+  return paragraph;
+}
+
+/**
+ * Insert an image into the document. The image bytes become a new media
+ * part under `/word/media/`, a relationship is added from the main
+ * document, and a `<w:drawing>`-bearing run is appended to (or returned
+ * for placement in) the body.
+ *
+ * Use `addImageRun` if you want the constructed run without it being
+ * appended automatically.
+ */
+export function addImage(doc: Docx, bytes: Uint8Array, options: AddImageOptions): WmlParagraph {
+  const run = addImageRun(doc, bytes, options);
+  const paragraph: WmlParagraph = {
+    kind: "paragraph",
+    children: [run],
+    extras: [],
+  };
+  doc.document.body.blocks.push(paragraph);
+  doc.dirty = true;
+  return paragraph;
+}
+
+/**
+ * Insert an image into an existing paragraph (as the final inline). The
+ * image part is added the same way {@link addImage} does, but the
+ * paragraph already exists — useful when mixing text and images on one
+ * line.
+ */
+export function insertImageInto(
+  doc: Docx,
+  paragraph: WmlParagraph,
+  bytes: Uint8Array,
+  options: AddImageOptions,
+): WmlRun {
+  const run = addImageRun(doc, bytes, options);
+  paragraph.children.push(run);
+  doc.dirty = true;
+  return run;
+}
+
+/**
+ * Like {@link addImage} but returns the constructed run without inserting
+ * it. Callers can place the run wherever they want (e.g. inside an
+ * existing paragraph).
+ */
+export function addImageRun(doc: Docx, bytes: Uint8Array, options: AddImageOptions): WmlRun {
+  const contentType = options.contentType ?? sniffImageContentType(bytes);
+  if (!contentType) {
+    throw new Error(
+      "addImage: could not detect image content type from bytes; pass options.contentType explicitly",
+    );
+  }
+  const ext = extensionForImageContentType(contentType);
+  const partName = allocateImagePartName(doc, ext);
+  addPart(doc.opc, { name: partName, contentType, data: bytes });
+  setContentTypeDefault(doc.opc.contentTypes, ext, contentType);
+
+  const docRels = documentRelationships(doc);
+  const rel = addRelationship(docRels, {
+    type: WML_RELATIONSHIPS.image,
+    target: relativeMediaTarget(doc, partName),
+  });
+
+  const docPrId = allocateDocPrId(doc);
+  const drawing = buildInlineDrawing({
+    relId: rel.id,
+    widthEmu: options.widthEmu,
+    heightEmu: options.heightEmu,
+    docPrId,
+    ...(options.name !== undefined ? { name: options.name } : {}),
+    ...(options.altText !== undefined ? { altText: options.altText } : {}),
+  });
+  const piece: WmlRunPiece = { kind: "drawing", node: drawing };
+  doc.dirty = true;
+  return { kind: "run", pieces: [piece], extras: [] };
+}
+
+function documentRelationships(doc: Docx): RelationshipSet {
+  const set = partRelationships(doc.opc, doc.partName);
+  return set;
+}
+
+function allocateImagePartName(doc: Docx, extension: string): string {
+  let n = 1;
+  // Find lowest unused index.
+  while (hasPart(doc.opc, `/word/media/image${n}.${extension}`)) {
+    n++;
+  }
+  return `/word/media/image${n}.${extension}`;
+}
+
+function relativeMediaTarget(doc: Docx, partName: string): string {
+  // /word/document.xml relates targets relative to its own folder.
+  // /word/media/imageN.ext  →  media/imageN.ext
+  if (partName.startsWith("/word/")) return partName.slice("/word/".length);
+  return partName.startsWith("/") ? partName.slice(1) : partName;
+}
+
+function allocateDocPrId(doc: Docx): number {
+  // docPr ids must be unique across the document. We bump a counter that
+  // starts from the current max we can see in pass-through drawing nodes
+  // and from the relationships set length as a coarse upper bound.
+  return Math.max(1, allRelationships(documentRelationships(doc)).length + 1);
+}
+
+/**
+ * Convenience access to the document title (`dc:title`). Reading returns
+ * the current value; writing replaces it via {@link setCoreProperties}.
+ */
+export function title(doc: Docx): string | undefined {
+  return coreProperties(doc).title;
+}
+
+export function setTitle(doc: Docx, value: string | undefined): void {
+  if (value !== undefined) setCoreProperties(doc, { title: value });
+}
+
+/**
+ * Convenience access to the document author / creator (`dc:creator`).
+ */
+export function author(doc: Docx): string | undefined {
+  return coreProperties(doc).creator;
+}
+
+export function setAuthor(doc: Docx, value: string | undefined): void {
+  if (value !== undefined) setCoreProperties(doc, { creator: value });
+}
+
+/**
+ * Enumerate every `<w:instrText>` field instruction found in the body.
+ * Useful for inspecting what fields a template carries before deciding
+ * how to fill them.
+ */
+export function fields(doc: Docx): Array<{ paragraph: WmlParagraph; instruction: string }> {
+  const out: Array<{ paragraph: WmlParagraph; instruction: string }> = [];
+  const visit = (p: WmlParagraph): void => {
+    for (const child of p.children) {
+      if (child.kind === "run") {
+        for (const piece of child.pieces) {
+          if (piece.kind === "instrText") {
+            out.push({ paragraph: p, instruction: piece.value });
+          }
+        }
+      } else if (child.kind === "raw") {
+        const walk = (el: XmlElement): void => {
+          if (el.name.uri === WML_NS && el.name.local === "instrText") {
+            let acc = "";
+            for (const c of el.children) {
+              if (c.kind === "text") acc += c.value;
+              else if (c.kind === "cdata") acc += c.value;
+            }
+            out.push({ paragraph: p, instruction: acc });
+            return;
+          }
+          for (const c of el.children) if (c.kind === "element") walk(c);
+        };
+        walk(child.node);
+      }
+    }
+  };
+  for (const block of doc.document.body.blocks) {
+    if (block.kind === "paragraph") visit(block);
+    else if (block.kind === "table") {
+      for (const row of block.rows) {
+        for (const cell of row.cells) {
+          for (const p of cell.paragraphs) visit(p);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Read the package's core document properties (title, creator, subject,
+ * etc.), parsed from `docProps/core.xml`. Returns an empty record if the
+ * part is absent.
+ */
+export function coreProperties(doc: Docx): DocumentCoreProperties {
+  const part = getPart(doc.opc, CORE_PROPERTIES_PART_NAME);
+  if (!part) return {};
+  const xml = new TextDecoder("utf-8").decode(part.data);
+  return parseCoreProperties(parseXml(xml));
+}
+
+/**
+ * Read the package's application-level document properties (Application,
+ * AppVersion, Pages, Words, Company, Manager, …) from `docProps/app.xml`.
+ * Returns an empty record if the part is absent.
+ */
+export function appProperties(doc: Docx): DocumentAppProperties {
+  const part = getPart(doc.opc, APP_PROPERTIES_PART_NAME);
+  if (!part) return {};
+  const xml = new TextDecoder("utf-8").decode(part.data);
+  return parseAppProperties(parseXml(xml));
+}
+
+/**
+ * Write application-level document properties. Creates `docProps/app.xml`
+ * and the package-level relationship on first use; subsequent calls
+ * merge into existing properties.
+ */
+export function setAppProperties(doc: Docx, props: DocumentAppProperties): void {
+  if (!hasPart(doc.opc, APP_PROPERTIES_PART_NAME)) {
+    addPart(doc.opc, {
+      name: APP_PROPERTIES_PART_NAME,
+      contentType: APP_PROPERTIES_CONTENT_TYPE,
+      data: new TextEncoder().encode(EMPTY_APP_PROPERTIES_XML),
+    });
+    const pkgRels = packageRelationships(doc.opc);
+    if (relationshipsByType(pkgRels, APP_PROPERTIES_REL_TYPE).length === 0) {
+      addRelationship(pkgRels, { type: APP_PROPERTIES_REL_TYPE, target: "docProps/app.xml" });
+    }
+  }
+  const existing = appProperties(doc);
+  const merged: DocumentAppProperties = { ...existing, ...props };
+  const xml = serializeXml(writeAppProperties(merged));
+  const part = getPart(doc.opc, APP_PROPERTIES_PART_NAME);
+  if (part) part.data = new TextEncoder().encode(xml);
+}
+
+/**
+ * Write the package's core document properties. Creates
+ * `docProps/core.xml` and the package-level relationship on first use.
+ * Subsequent calls merge into existing properties.
+ */
+export function setCoreProperties(doc: Docx, props: DocumentCoreProperties): void {
+  if (!hasPart(doc.opc, CORE_PROPERTIES_PART_NAME)) {
+    addPart(doc.opc, {
+      name: CORE_PROPERTIES_PART_NAME,
+      contentType: CORE_PROPERTIES_CONTENT_TYPE,
+      data: new TextEncoder().encode(EMPTY_CORE_PROPERTIES_XML),
+    });
+    const pkgRels = packageRelationships(doc.opc);
+    if (relationshipsByType(pkgRels, CORE_PROPERTIES_REL_TYPE).length === 0) {
+      addRelationship(pkgRels, { type: CORE_PROPERTIES_REL_TYPE, target: "docProps/core.xml" });
+    }
+  }
+  const existing = coreProperties(doc);
+  const merged: DocumentCoreProperties = { ...existing, ...props };
+  const xml = serializeXml(writeCoreProperties(merged));
+  const part = getPart(doc.opc, CORE_PROPERTIES_PART_NAME);
+  if (part) part.data = new TextEncoder().encode(xml);
+}
+
+/** Parsed `word/footnotes.xml` AST, or `undefined` if absent. */
+export function footnotesPart(doc: Docx): WmlFootnotesPart | undefined {
+  if (doc.footnotesCache) return doc.footnotesCache;
+  const part = getPart(doc.opc, FOOTNOTES_PART_NAME);
+  if (!part) return undefined;
+  const xml = new TextDecoder("utf-8").decode(part.data);
+  doc.footnotesCache = parseFootnotesPart(parseXml(xml));
+  return doc.footnotesCache;
+}
+
+/** Parsed `word/endnotes.xml` AST, or `undefined` if absent. */
+export function endnotesPart(doc: Docx): WmlFootnotesPart | undefined {
+  if (doc.endnotesCache) return doc.endnotesCache;
+  const part = getPart(doc.opc, ENDNOTES_PART_NAME);
+  if (!part) return undefined;
+  const xml = new TextDecoder("utf-8").decode(part.data);
+  doc.endnotesCache = parseFootnotesPart(parseXml(xml));
+  return doc.endnotesCache;
+}
+
+/**
+ * Append a footnote with the given text. Creates `footnotes.xml` (with
+ * the standard separator/continuationSeparator entries) on first use,
+ * registers the relationship from `word/document.xml`, and inserts a
+ * `<w:footnoteReference>` run at the end of the target paragraph.
+ *
+ * Returns the assigned footnote id (>=1).
+ */
+export function addFootnote(doc: Docx, paragraph: WmlParagraph, text: string): number {
+  return addNoteImpl(doc, paragraph, text, "footnote");
+}
+
+/** Same shape as {@link addFootnote} but for endnotes. */
+export function addEndnote(doc: Docx, paragraph: WmlParagraph, text: string): number {
+  return addNoteImpl(doc, paragraph, text, "endnote");
+}
+
+function addNoteImpl(
+  doc: Docx,
+  paragraph: WmlParagraph,
+  text: string,
+  kind: "footnote" | "endnote",
+): number {
+  const part = kind === "footnote" ? ensureFootnotesPart(doc) : ensureEndnotesPart(doc);
+  const usedIds = new Set<number>();
+  for (const f of part.footnotes) {
+    const id = f.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id")?.value;
+    if (id !== undefined) {
+      const n = Number.parseInt(id, 10);
+      if (Number.isFinite(n)) usedIds.add(n);
+    }
+  }
+  let nextId = 1;
+  while (usedIds.has(nextId)) nextId++;
+  const note = buildFootnote({ id: nextId, text }, kind);
+  part.footnotes.push(note);
+  if (kind === "footnote") doc.footnotesDirty = true;
+  else doc.endnotesDirty = true;
+
+  // Insert a reference run at the end of the paragraph.
+  paragraph.children.push({
+    kind: "raw",
+    node: buildFootnoteReferenceRun(
+      nextId,
+      kind === "footnote" ? "footnoteReference" : "endnoteReference",
+    ),
+  });
+  doc.dirty = true;
+  return nextId;
+}
+
+function ensureFootnotesPart(doc: Docx): WmlFootnotesPart {
+  const existing = footnotesPart(doc);
+  if (existing) return existing;
+  addPart(doc.opc, {
+    name: FOOTNOTES_PART_NAME,
+    contentType: WML_CONTENT_TYPES.footnotes,
+    data: new TextEncoder().encode(SEED_FOOTNOTES_XML),
+  });
+  const docRels = partRelationships(doc.opc, doc.partName);
+  if (relationshipsByType(docRels, WML_RELATIONSHIPS.footnotes).length === 0) {
+    addRelationship(docRels, { type: WML_RELATIONSHIPS.footnotes, target: "footnotes.xml" });
+  }
+  const xml = new TextDecoder("utf-8").decode(
+    getPart(doc.opc, FOOTNOTES_PART_NAME)?.data ?? new Uint8Array(),
+  );
+  doc.footnotesCache = parseFootnotesPart(parseXml(xml));
+  doc.footnotesDirty = true;
+  return doc.footnotesCache;
+}
+
+function ensureEndnotesPart(doc: Docx): WmlFootnotesPart {
+  const existing = endnotesPart(doc);
+  if (existing) return existing;
+  addPart(doc.opc, {
+    name: ENDNOTES_PART_NAME,
+    contentType: WML_CONTENT_TYPES.endnotes,
+    data: new TextEncoder().encode(SEED_ENDNOTES_XML),
+  });
+  const docRels = partRelationships(doc.opc, doc.partName);
+  if (relationshipsByType(docRels, WML_RELATIONSHIPS.endnotes).length === 0) {
+    addRelationship(docRels, { type: WML_RELATIONSHIPS.endnotes, target: "endnotes.xml" });
+  }
+  const xml = new TextDecoder("utf-8").decode(
+    getPart(doc.opc, ENDNOTES_PART_NAME)?.data ?? new Uint8Array(),
+  );
+  doc.endnotesCache = parseFootnotesPart(parseXml(xml));
+  doc.endnotesDirty = true;
+  return doc.endnotesCache;
+}
+
+/** Parsed `word/comments.xml` AST, or `undefined` if absent. */
+export function commentsPart(doc: Docx): WmlCommentsPart | undefined {
+  if (doc.commentsCache) return doc.commentsCache;
+  const part = getPart(doc.opc, COMMENTS_PART_NAME);
+  if (!part) return undefined;
+  const xml = new TextDecoder("utf-8").decode(part.data);
+  doc.commentsCache = parseCommentsPart(parseXml(xml));
+  return doc.commentsCache;
+}
+
+/**
+ * Attach a comment to the given paragraph. The comment range covers the
+ * entire paragraph: `<w:commentRangeStart>` is inserted at the start,
+ * `<w:commentRangeEnd>` plus a `<w:commentReference>` icon run at the
+ * end. The comment body is stored in `word/comments.xml`.
+ *
+ * Returns the assigned comment id.
+ */
+export function addComment(doc: Docx, paragraph: WmlParagraph, options: AddCommentOptions): number {
+  const part = ensureCommentsPart(doc);
+  const usedIds = new Set<number>();
+  for (const c of part.comments) {
+    const id = c.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id")?.value;
+    if (id !== undefined) {
+      const n = Number.parseInt(id, 10);
+      if (Number.isFinite(n)) usedIds.add(n);
+    }
+  }
+  let nextId = 0;
+  while (usedIds.has(nextId)) nextId++;
+  const comment = buildComment({
+    id: nextId,
+    author: options.author,
+    text: options.text,
+    ...(options.initials !== undefined ? { initials: options.initials } : {}),
+    ...(options.date !== undefined ? { date: options.date } : {}),
+  });
+  part.comments.push(comment);
+  doc.commentsDirty = true;
+
+  // Wrap the paragraph's inline children with rangeStart/rangeEnd+ref.
+  paragraph.children = [
+    { kind: "raw", node: buildCommentRangeStart(nextId) },
+    ...paragraph.children,
+    { kind: "raw", node: buildCommentRangeEnd(nextId) },
+    { kind: "raw", node: buildCommentReferenceRun(nextId) },
+  ];
+  doc.dirty = true;
+  return nextId;
+}
+
+function ensureCommentsPart(doc: Docx): WmlCommentsPart {
+  const existing = commentsPart(doc);
+  if (existing) return existing;
+  addPart(doc.opc, {
+    name: COMMENTS_PART_NAME,
+    contentType: WML_CONTENT_TYPES.comments,
+    data: new TextEncoder().encode(EMPTY_COMMENTS_XML),
+  });
+  const docRels = partRelationships(doc.opc, doc.partName);
+  if (relationshipsByType(docRels, WML_RELATIONSHIPS.comments).length === 0) {
+    addRelationship(docRels, { type: WML_RELATIONSHIPS.comments, target: "comments.xml" });
+  }
+  const xml = new TextDecoder("utf-8").decode(
+    getPart(doc.opc, COMMENTS_PART_NAME)?.data ?? new Uint8Array(),
+  );
+  doc.commentsCache = parseCommentsPart(parseXml(xml));
+  doc.commentsDirty = true;
+  return doc.commentsCache;
+}
+
+/**
+ * Add a header part with the given text and wire it to the body's
+ * trailing `<w:sectPr>`. Creates the sectPr if missing.
+ *
+ * Returns the relationship id assigned to the header part.
+ */
+export function addHeader(doc: Docx, text: string, type: HeaderFooterType = "default"): string {
+  const partName = allocateHeaderPartName(doc);
+  const xml = buildHeaderXml(text);
+  addPart(doc.opc, {
+    name: partName,
+    contentType: WML_CONTENT_TYPES.header,
+    data: new TextEncoder().encode(xml),
+  });
+  const docRels = partRelationships(doc.opc, doc.partName);
+  const rel = addRelationship(docRels, {
+    type: WML_RELATIONSHIPS.header,
+    target: targetRelativeToDoc(doc, partName),
+  });
+  const sectPr = ensureBodySectPr(doc);
+  addSectPrHeaderRef(sectPr, type, rel.id);
+  doc.dirty = true;
+  return rel.id;
+}
+
+/**
+ * Add a footer that displays a centered PAGE field with optional
+ * surrounding text. Word renders the live page number when the document
+ * is opened.
+ */
+export function addPageNumberFooter(
+  doc: Docx,
+  prefix = "",
+  suffix = "",
+  type: HeaderFooterType = "default",
+): string {
+  const partName = allocateFooterPartName(doc);
+  const xml = buildPageNumberFooterXml(prefix, suffix);
+  addPart(doc.opc, {
+    name: partName,
+    contentType: WML_CONTENT_TYPES.footer,
+    data: new TextEncoder().encode(xml),
+  });
+  const docRels = partRelationships(doc.opc, doc.partName);
+  const rel = addRelationship(docRels, {
+    type: WML_RELATIONSHIPS.footer,
+    target: targetRelativeToDoc(doc, partName),
+  });
+  const sectPr = ensureBodySectPr(doc);
+  addSectPrFooterRef(sectPr, type, rel.id);
+  doc.dirty = true;
+  return rel.id;
+}
+
+/**
+ * Append a complex field (PAGE, NUMPAGES, DATE, MERGEFIELD …) to the
+ * end of the given paragraph. The output is the canonical
+ * `fldChar begin/instrText/separate/display/fldChar end` run sequence.
+ */
+export function appendField(
+  doc: Docx,
+  paragraph: WmlParagraph,
+  instruction: string,
+  displayText = "",
+): void {
+  for (const run of buildFieldRuns(instruction, displayText)) {
+    paragraph.children.push({ kind: "raw", node: run });
+  }
+  doc.dirty = true;
+}
+
+/** Like {@link addHeader} but for a footer. */
+export function addFooter(doc: Docx, text: string, type: HeaderFooterType = "default"): string {
+  const partName = allocateFooterPartName(doc);
+  const xml = buildFooterXml(text);
+  addPart(doc.opc, {
+    name: partName,
+    contentType: WML_CONTENT_TYPES.footer,
+    data: new TextEncoder().encode(xml),
+  });
+  const docRels = partRelationships(doc.opc, doc.partName);
+  const rel = addRelationship(docRels, {
+    type: WML_RELATIONSHIPS.footer,
+    target: targetRelativeToDoc(doc, partName),
+  });
+  const sectPr = ensureBodySectPr(doc);
+  addSectPrFooterRef(sectPr, type, rel.id);
+  doc.dirty = true;
+  return rel.id;
+}
+
+/** Set the page size on the body's trailing `<w:sectPr>`. */
+export function setPageSize(doc: Docx, size: PageSize): void {
+  const sectPr = ensureBodySectPr(doc);
+  setSectPrPageSize(sectPr, size);
+  doc.dirty = true;
+}
+
+/** Set the page margins on the body's trailing `<w:sectPr>`. */
+export function setPageMargins(doc: Docx, margins: PageMargins): void {
+  const sectPr = ensureBodySectPr(doc);
+  setSectPrPageMargins(sectPr, margins);
+  doc.dirty = true;
+}
+
+/** Switch the page orientation (portrait/landscape) on the body sectPr. */
+export function setPageOrientation(doc: Docx, orientation: "portrait" | "landscape"): void {
+  const sectPr = ensureBodySectPr(doc);
+  const pgSz = sectPr.children.find(
+    (c): c is XmlElement => c.kind === "element" && c.name.local === "pgSz",
+  );
+  if (pgSz) {
+    // Swap width/height when toggling orientation if needed.
+    const wAttr = pgSz.attrs.find((a) => a.name.local === "w");
+    const hAttr = pgSz.attrs.find((a) => a.name.local === "h");
+    const widthTwips = wAttr ? Number.parseInt(wAttr.value, 10) : PAGE_SIZE_LETTER.widthTwips;
+    const heightTwips = hAttr ? Number.parseInt(hAttr.value, 10) : PAGE_SIZE_LETTER.heightTwips;
+    // For landscape, width > height; for portrait, height > width.
+    const isLandscape = orientation === "landscape";
+    const newWidth = isLandscape
+      ? Math.max(widthTwips, heightTwips)
+      : Math.min(widthTwips, heightTwips);
+    const newHeight = isLandscape
+      ? Math.min(widthTwips, heightTwips)
+      : Math.max(widthTwips, heightTwips);
+    setSectPrPageSize(sectPr, { widthTwips: newWidth, heightTwips: newHeight, orientation });
+  } else {
+    setSectPrPageSize(sectPr, { ...PAGE_SIZE_LETTER, orientation });
+  }
+  doc.dirty = true;
+}
+
+function ensureBodySectPr(doc: Docx): XmlElement {
+  if (doc.document.body.sectPr) return doc.document.body.sectPr;
+  const sectPr: XmlElement = {
+    kind: "element",
+    name: { uri: WML_NS, local: "sectPr", prefix: "w" },
+    attrs: [],
+    children: [
       {
         kind: "element",
-        name: { uri: WML_NS, local: "type", prefix: "w" },
+        name: { uri: WML_NS, local: "pgSz", prefix: "w" },
         attrs: [
-          { name: { uri: WML_NS, local: "val", prefix: "w" }, value: type, isNamespaceDecl: false },
+          {
+            name: { uri: WML_NS, local: "w", prefix: "w" },
+            value: "12240",
+            isNamespaceDecl: false,
+          },
+          {
+            name: { uri: WML_NS, local: "h", prefix: "w" },
+            value: "15840",
+            isNamespaceDecl: false,
+          },
         ],
         children: [],
         xmlSpace: "default",
         selfClosing: true,
       },
-    ];
-    if (options.pageSize) {
-      sectPrChildren.push(buildPgSzElement(options.pageSize));
-    }
-    if (options.pageMargins) {
-      sectPrChildren.push(buildPgMarElement(options.pageMargins));
-    }
-    const sectPr: XmlElement = {
-      kind: "element",
-      name: { uri: WML_NS, local: "sectPr", prefix: "w" },
-      attrs: [],
-      children: sectPrChildren,
-      xmlSpace: "default",
-      selfClosing: false,
-    };
-    const pPr: XmlElement = {
-      kind: "element",
-      name: { uri: WML_NS, local: "pPr", prefix: "w" },
-      attrs: [],
-      children: [sectPr],
-      xmlSpace: "default",
-      selfClosing: false,
-    };
-    const paragraph: WmlParagraph = {
-      kind: "paragraph",
-      pPr,
-      children: [],
-      extras: [],
-    };
-    this.docModel.body.blocks.push(paragraph);
-    this.dirty = true;
-    return paragraph;
-  }
-
-  /**
-   * Insert a new text paragraph at the given paragraph-relative index.
-   * `index` counts only paragraphs (so `0` means "before the first
-   * paragraph"); other body block kinds are skipped past. If `index` is
-   * past the end of the existing paragraphs, the new paragraph is
-   * appended.
-   */
-  insertParagraphAt(
-    index: number,
-    text: string,
-    options: AppendParagraphOptions = {},
-  ): WmlParagraph {
-    let count = 0;
-    let blockInsertAt = this.docModel.body.blocks.length;
-    for (let i = 0; i < this.docModel.body.blocks.length; i++) {
-      const b = this.docModel.body.blocks[i];
-      if (b?.kind === "paragraph") {
-        if (count === index) {
-          blockInsertAt = i;
-          break;
-        }
-        count++;
-      }
-    }
-    // Build the paragraph using the same logic as appendParagraph by
-    // calling it temporarily, then moving the newly-pushed paragraph into
-    // place.
-    const para = this.appendParagraph(text, options);
-    const lastIdx = this.docModel.body.blocks.length - 1;
-    if (lastIdx !== blockInsertAt) {
-      this.docModel.body.blocks.splice(lastIdx, 1);
-      this.docModel.body.blocks.splice(blockInsertAt, 0, para);
-    }
-    return para;
-  }
-
-  /** Remove the paragraph at `index` from the body. Returns true on success. */
-  removeParagraph(index: number): boolean {
-    let count = 0;
-    for (let i = 0; i < this.docModel.body.blocks.length; i++) {
-      const b = this.docModel.body.blocks[i];
-      if (b?.kind === "paragraph") {
-        if (count === index) {
-          this.docModel.body.blocks.splice(i, 1);
-          this.dirty = true;
-          return true;
-        }
-        count++;
-      }
-    }
-    return false;
-  }
-
-  /** Remove all body blocks (paragraphs and tables). The body sectPr is kept. */
-  clearBody(): void {
-    this.docModel.body.blocks.length = 0;
-    this.dirty = true;
-  }
-
-  /**
-   * Remove every image part (`/word/media/*`), drop matching image
-   * relationships, and strip `<w:drawing>` runs from the body. Returns
-   * the number of media parts removed.
-   */
-  removeAllImages(): number {
-    const docRels = partRelationships(this.pkg, this.partName);
-    let removed = 0;
-    for (const rel of relationshipsByType(docRels, WML_RELATIONSHIPS.image)) {
-      const partName = this.resolvePartTarget(rel.target);
-      if (rel.targetMode !== "External" && removePart(this.pkg, partName)) removed++;
-      removeRelationship(docRels, rel.id);
-    }
-    const hasDrawing = (el: XmlElement): boolean => {
-      if (el.name.uri === WML_NS && el.name.local === "drawing") return true;
-      for (const c of el.children) {
-        if (c.kind === "element" && hasDrawing(c)) return true;
-      }
-      return false;
-    };
-    const stripDrawings = (p: WmlParagraph): void => {
-      p.children = p.children.filter((child) => {
-        if (child.kind === "raw") {
-          if (child.node.name.uri === WML_NS && child.node.name.local === "drawing") return false;
-          if (child.node.name.local === "r" && hasDrawing(child.node)) return false;
-        }
-        if (child.kind === "run") {
-          child.pieces = child.pieces.filter((piece) => piece.kind !== "drawing");
-        }
-        return true;
-      });
-    };
-    const walk = (blocks: WmlBlock[]): void => {
-      for (const b of blocks) {
-        if (b.kind === "paragraph") stripDrawings(b);
-        else if (b.kind === "table") {
-          for (const row of b.rows) {
-            for (const cell of row.cells) {
-              for (const p of cell.paragraphs) stripDrawings(p);
-            }
-          }
-        }
-      }
-    };
-    walk(this.docModel.body.blocks);
-    if (removed > 0) this.dirty = true;
-    return removed;
-  }
-
-  /** Remove every bookmark from the body. Returns the count removed. */
-  removeAllBookmarks(): number {
-    const names = this.bookmarks.map((b) => b.name);
-    let removed = 0;
-    for (const name of names) {
-      if (this.removeBookmark(name)) removed++;
-    }
-    return removed;
-  }
-
-  /**
-   * Remove every header part and its references from the body's sectPr.
-   * Returns the number of header parts removed.
-   */
-  removeAllHeaders(): number {
-    return this.removeAllHeaderFooterParts(WML_RELATIONSHIPS.header, "headerReference");
-  }
-
-  /** Same shape as {@link removeAllHeaders} but for footer parts. */
-  removeAllFooters(): number {
-    return this.removeAllHeaderFooterParts(WML_RELATIONSHIPS.footer, "footerReference");
-  }
-
-  /**
-   * Remove every user footnote AND every `<w:footnoteReference>` run from
-   * the body. Keeps the standard separator / continuationSeparator entries
-   * intact. Returns the number of user footnotes removed.
-   */
-  removeAllFootnotes(): number {
-    return this.removeAllNotes("footnote");
-  }
-
-  /** Same shape as {@link removeAllFootnotes} but for endnotes. */
-  removeAllEndnotes(): number {
-    return this.removeAllNotes("endnote");
-  }
-
-  private removeAllNotes(kind: "footnote" | "endnote"): number {
-    const part = kind === "footnote" ? this.footnotesPart : this.endnotesPart;
-    if (!part) return 0;
-    let removed = 0;
-    const survivors: typeof part.footnotes = [];
-    for (const note of part.footnotes) {
-      const typeAttr = note.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "type");
-      if (
-        typeAttr &&
-        (typeAttr.value === "separator" || typeAttr.value === "continuationSeparator")
-      ) {
-        survivors.push(note);
-      } else {
-        removed++;
-      }
-    }
-    part.footnotes.length = 0;
-    for (const s of survivors) part.footnotes.push(s);
-    if (kind === "footnote") this.footnotesDirty = true;
-    else this.endnotesDirty = true;
-    // Strip <w:footnoteReference> / <w:endnoteReference> runs from body
-    // paragraphs.
-    const refLocal = kind === "footnote" ? "footnoteReference" : "endnoteReference";
-    const stripFromParagraph = (p: WmlParagraph): void => {
-      p.children = p.children.filter((child) => {
-        if (child.kind !== "raw") return true;
-        if (child.node.name.uri !== WML_NS) return true;
-        if (child.node.name.local !== "r") return true;
-        return !child.node.children.some(
-          (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === refLocal,
-        );
-      });
-    };
-    const walk = (blocks: WmlBlock[]): void => {
-      for (const b of blocks) {
-        if (b.kind === "paragraph") stripFromParagraph(b);
-        else if (b.kind === "table") {
-          for (const row of b.rows) {
-            for (const cell of row.cells) {
-              for (const p of cell.paragraphs) stripFromParagraph(p);
-            }
-          }
-        }
-      }
-    };
-    walk(this.docModel.body.blocks);
-    if (removed > 0) this.dirty = true;
-    return removed;
-  }
-
-  private removeAllHeaderFooterParts(relType: string, refLocal: string): number {
-    let removed = 0;
-    const docRels = partRelationships(this.pkg, this.partName);
-    for (const rel of relationshipsByType(docRels, relType)) {
-      const partName = this.resolvePartTarget(rel.target);
-      if (removePart(this.pkg, partName)) removed++;
-      removeRelationship(docRels, rel.id);
-    }
-    // Strip *Reference children from the body's sectPr in place.
-    const sectPr = this.docModel.body.sectPr;
-    if (sectPr) {
-      const arr = sectPr.children as XmlElement[];
-      let writeIdx = 0;
-      for (let i = 0; i < arr.length; i++) {
-        const c = arr[i];
-        if (!c) continue;
-        if (c.kind === "element" && c.name.uri === WML_NS && c.name.local === refLocal) continue;
-        arr[writeIdx++] = c;
-      }
-      arr.length = writeIdx;
-    }
-    if (removed > 0) this.dirty = true;
-    return removed;
-  }
-
-  /**
-   * Remove every comment from `comments.xml` AND every comment range
-   * marker and reference run from `document.xml`. Returns the number of
-   * comments removed.
-   */
-  removeAllComments(): number {
-    const part = this.commentsPart;
-    let removed = 0;
-    if (part) {
-      removed = part.comments.length;
-      part.comments.length = 0;
-      this.commentsDirty = true;
-    }
-    // Strip commentRangeStart / commentRangeEnd / commentReference from the body.
-    const stripFromParagraph = (p: WmlParagraph): void => {
-      p.children = p.children.filter((child) => {
-        if (child.kind !== "raw") return true;
-        const local = child.node.name.local;
-        if (
-          child.node.name.uri === WML_NS &&
-          (local === "commentRangeStart" ||
-            local === "commentRangeEnd" ||
-            (local === "r" &&
-              child.node.children.some(
-                (c) =>
-                  c.kind === "element" &&
-                  c.name.uri === WML_NS &&
-                  c.name.local === "commentReference",
-              )))
-        ) {
-          return false;
-        }
-        return true;
-      });
-    };
-    const walk = (blocks: WmlBlock[]): void => {
-      for (const b of blocks) {
-        if (b.kind === "paragraph") stripFromParagraph(b);
-        else if (b.kind === "table") {
-          for (const row of b.rows) {
-            for (const cell of row.cells) {
-              for (const p of cell.paragraphs) stripFromParagraph(p);
-            }
-          }
-        }
-      }
-    };
-    walk(this.docModel.body.blocks);
-    if (removed > 0) this.dirty = true;
-    return removed;
-  }
-
-  /**
-   * Append a paragraph whose only content is a page break. Equivalent to
-   * Ctrl+Enter in Word.
-   */
-  appendPageBreak(): WmlParagraph {
-    const piece: WmlRunPiece = { kind: "break", breakType: "page" };
-    const run: WmlRun = { kind: "run", pieces: [piece], extras: [] };
-    const paragraph: WmlParagraph = { kind: "paragraph", children: [run], extras: [] };
-    this.docModel.body.blocks.push(paragraph);
-    this.dirty = true;
-    return paragraph;
-  }
-
-  /**
-   * Add a named bookmark covering a paragraph. Returns the assigned numeric
-   * bookmark id; the same name must not be reused without removing the
-   * existing bookmark first (Word will deduplicate silently otherwise).
-   */
-  addBookmark(name: string, paragraph: WmlParagraph): number {
-    const id = this.allocateBookmarkId();
-    const start: XmlElement = {
-      kind: "element",
-      name: { uri: WML_NS, local: "bookmarkStart", prefix: "w" },
-      attrs: [
-        {
-          name: { uri: WML_NS, local: "id", prefix: "w" },
-          value: String(id),
-          isNamespaceDecl: false,
-        },
-        { name: { uri: WML_NS, local: "name", prefix: "w" }, value: name, isNamespaceDecl: false },
-      ],
-      children: [],
-      xmlSpace: "default",
-      selfClosing: true,
-    };
-    const end: XmlElement = {
-      kind: "element",
-      name: { uri: WML_NS, local: "bookmarkEnd", prefix: "w" },
-      attrs: [
-        {
-          name: { uri: WML_NS, local: "id", prefix: "w" },
-          value: String(id),
-          isNamespaceDecl: false,
-        },
-      ],
-      children: [],
-      xmlSpace: "default",
-      selfClosing: true,
-    };
-    paragraph.children = [
-      { kind: "raw", node: start },
-      ...paragraph.children,
-      { kind: "raw", node: end },
-    ];
-    this.dirty = true;
-    return id;
-  }
-
-  /**
-   * Append a paragraph with a hyperlink that points at an internal bookmark.
-   */
-  addInternalHyperlink(
-    bookmarkName: string,
-    text: string,
-    options: { tooltip?: string } = {},
-  ): WmlParagraph {
-    const hyperlinkEl = buildHyperlink({
-      anchor: bookmarkName,
-      runs: [buildHyperlinkRun(text)],
-      ...(options.tooltip !== undefined ? { tooltip: options.tooltip } : {}),
-    });
-    const paragraph: WmlParagraph = {
-      kind: "paragraph",
-      children: [{ kind: "raw", node: hyperlinkEl }],
-      extras: [],
-    };
-    this.docModel.body.blocks.push(paragraph);
-    this.dirty = true;
-    return paragraph;
-  }
-
-  private allocateBookmarkId(): number {
-    // Bookmarks are numbered uniquely per document; we scan existing IDs to
-    // avoid colliding with anything in the document.
-    let max = -1;
-    const scan = (el: XmlElement): void => {
-      if (
-        el.name.uri === WML_NS &&
-        (el.name.local === "bookmarkStart" || el.name.local === "bookmarkEnd")
-      ) {
-        const idAttr = el.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id");
-        if (idAttr) {
-          const n = Number.parseInt(idAttr.value, 10);
-          if (Number.isFinite(n) && n > max) max = n;
-        }
-      }
-      for (const c of el.children) {
-        if (c.kind === "element") scan(c);
-      }
-    };
-    // Walk all inline nodes in body to find existing bookmark ids.
-    for (const block of this.docModel.body.blocks) {
-      if (block.kind === "paragraph") {
-        for (const child of block.children) {
-          if (child.kind === "raw") scan(child.node);
-        }
-      } else if (block.kind === "raw") {
-        scan(block.node);
-      }
-    }
-    return max + 1;
-  }
-
-  /**
-   * Append a paragraph containing a single external hyperlink. Creates an
-   * external relationship (TargetMode=External) for the URL and wraps a
-   * styled run inside `<w:hyperlink>`.
-   */
-  addHyperlink(url: string, text: string, options: { tooltip?: string } = {}): WmlParagraph {
-    const docRels = partRelationships(this.pkg, this.partName);
-    const rel = addRelationship(docRels, {
-      type: WML_RELATIONSHIPS.hyperlink,
-      target: url,
-      targetMode: "External",
-    });
-    const hyperlinkEl = buildHyperlink({
-      relId: rel.id,
-      runs: [buildHyperlinkRun(text)],
-      ...(options.tooltip !== undefined ? { tooltip: options.tooltip } : {}),
-    });
-    const paragraph: WmlParagraph = {
-      kind: "paragraph",
-      children: [{ kind: "raw", node: hyperlinkEl }],
-      extras: [],
-    };
-    this.docModel.body.blocks.push(paragraph);
-    this.dirty = true;
-    return paragraph;
-  }
-
-  /**
-   * Accept every `<w:ins>` and `<w:del>` revision in the document.
-   * Insertions are kept and unwrapped; deletions are dropped. Returns the
-   * number of revisions resolved.
-   */
-  acceptAllRevisions(): number {
-    const n = acceptAllRevisions(this.docModel);
-    if (n > 0) this.dirty = true;
-    return n;
-  }
-
-  /**
-   * Reject every `<w:ins>` and `<w:del>` revision in the document.
-   * Insertions are dropped; deletions are kept and unwrapped. Returns the
-   * number of revisions resolved.
-   */
-  rejectAllRevisions(): number {
-    const n = rejectAllRevisions(this.docModel);
-    if (n > 0) this.dirty = true;
-    return n;
-  }
-
-  /**
-   * Shortcut for `appendParagraph(text, { style: "Heading{level}" })`. Note
-   * that the referenced `HeadingN` style must be present in `styles.xml`
-   * for Word to render it as a heading — call {@link ensureHeadingStyles}
-   * once during setup if you want defaults to be defined automatically.
-   */
-  appendHeading(text: string, level = 1): WmlParagraph {
-    if (level < 1 || level > 9 || !Number.isInteger(level)) {
-      throw new Error(`Heading level must be an integer in 1..9, got ${level}`);
-    }
-    return this.appendParagraph(text, { style: `Heading${level}` });
-  }
-
-  /**
-   * Ensure default `Heading1`..`Heading{maxLevel}` styles exist in
-   * `styles.xml`. Each missing style is added with sensible defaults
-   * (smaller / lighter as the level increases). Existing same-id styles
-   * are left untouched.
-   */
-  ensureHeadingStyles(maxLevel = 3): void {
-    const sizes = [40, 32, 28, 24, 22, 22, 22, 22, 22];
-    const colors = [
-      "1F497D",
-      "1F497D",
-      "4F81BD",
-      "4F81BD",
-      "8DB3E2",
-      "8DB3E2",
-      "8DB3E2",
-      "8DB3E2",
-      "8DB3E2",
-    ];
-    const part = this.stylesPart;
-    for (let lvl = 1; lvl <= Math.min(maxLevel, 9); lvl++) {
-      const id = `Heading${lvl}`;
-      if (
-        part?.styles.some((s) => s.attrs.some((a) => a.name.local === "styleId" && a.value === id))
-      )
-        continue;
-      this.addStyle({
-        type: "paragraph",
-        styleId: id,
-        name: `heading ${lvl}`,
-        basedOn: "Normal",
-        next: "Normal",
-        qFormat: true,
-        uiPriority: 9,
-        bold: lvl <= 2,
-        fontSizeHalfPoints: sizes[lvl - 1] ?? 24,
-        color: colors[lvl - 1] ?? "1F497D",
-      });
-    }
-  }
-
-  /**
-   * Extract a document outline — every paragraph whose pStyle matches
-   * `Heading{level}`. Each entry includes the paragraph reference, the
-   * heading level (1-9), and the visible text.
-   */
-  outline(): Array<{ paragraph: WmlParagraph; level: number; text: string }> {
-    const out: Array<{ paragraph: WmlParagraph; level: number; text: string }> = [];
-    for (const block of this.docModel.body.blocks) {
-      if (block.kind !== "paragraph") continue;
-      const style = block.pPr?.children.find(
-        (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === "pStyle",
-      );
-      if (style?.kind !== "element") continue;
-      const styleId = style.attrs.find(
-        (a) => a.name.uri === WML_NS && a.name.local === "val",
-      )?.value;
-      if (!styleId) continue;
-      const m = /^Heading(\d)$/.exec(styleId);
-      if (!m) continue;
-      const level = Number.parseInt(m[1] ?? "0", 10);
-      if (!Number.isFinite(level) || level < 1 || level > 9) continue;
-      out.push({ paragraph: block, level, text: documentTextOfParagraph(block) });
-    }
-    return out;
-  }
-
-  /** Append a paragraph containing a single text run to the body. */
-  appendParagraph(text: string, options: AppendParagraphOptions = {}): WmlParagraph {
-    const piece: WmlRunPiece = {
-      kind: "text",
-      value: text,
-      preserveSpace: /^\s|\s$/.test(text),
-    };
-    const run: WmlRun =
-      options.bold || options.italic
-        ? {
-            kind: "run",
-            rPr: {
-              kind: "element",
-              name: { uri: WML_NS, local: "rPr", prefix: "w" },
-              attrs: [],
-              children: [
-                ...(options.bold ? [wmlEmptyEl("b")] : []),
-                ...(options.italic ? [wmlEmptyEl("i")] : []),
-              ],
-              xmlSpace: "default",
-              selfClosing: false,
-            },
-            pieces: [piece],
-            extras: [],
-          }
-        : {
-            kind: "run",
-            pieces: [piece],
-            extras: [],
-          };
-    const paragraph: WmlParagraph = options.style
-      ? {
-          kind: "paragraph",
-          pPr: {
-            kind: "element",
-            name: { uri: WML_NS, local: "pPr", prefix: "w" },
-            attrs: [],
-            children: [
-              {
-                kind: "element",
-                name: { uri: WML_NS, local: "pStyle", prefix: "w" },
-                attrs: [
-                  {
-                    name: { uri: WML_NS, local: "val", prefix: "w" },
-                    value: options.style,
-                    isNamespaceDecl: false,
-                  },
-                ],
-                children: [],
-                xmlSpace: "default",
-                selfClosing: true,
-              },
-            ],
-            xmlSpace: "default",
-            selfClosing: false,
-          },
-          children: [run],
-          extras: [],
-        }
-      : {
-          kind: "paragraph",
-          children: [run],
-          extras: [],
-        };
-    this.docModel.body.blocks.push(paragraph);
-    this.dirty = true;
-    return paragraph;
-  }
-
-  /**
-   * Insert an image into the document. The image bytes become a new media
-   * part under `/word/media/`, a relationship is added from the main
-   * document, and a `<w:drawing>`-bearing run is appended to (or returned
-   * for placement in) the body.
-   *
-   * Use `addImageRun` if you want the constructed run without it being
-   * appended automatically.
-   */
-  addImage(bytes: Uint8Array, options: AddImageOptions): WmlParagraph {
-    const run = this.addImageRun(bytes, options);
-    const paragraph: WmlParagraph = {
-      kind: "paragraph",
-      children: [run],
-      extras: [],
-    };
-    this.docModel.body.blocks.push(paragraph);
-    this.dirty = true;
-    return paragraph;
-  }
-
-  /**
-   * Insert an image into an existing paragraph (as the final inline). The
-   * image part is added the same way {@link addImage} does, but the
-   * paragraph already exists — useful when mixing text and images on one
-   * line.
-   */
-  insertImageInto(paragraph: WmlParagraph, bytes: Uint8Array, options: AddImageOptions): WmlRun {
-    const run = this.addImageRun(bytes, options);
-    paragraph.children.push(run);
-    this.dirty = true;
-    return run;
-  }
-
-  /**
-   * Like {@link addImage} but returns the constructed run without inserting
-   * it. Callers can place the run wherever they want (e.g. inside an
-   * existing paragraph).
-   */
-  addImageRun(bytes: Uint8Array, options: AddImageOptions): WmlRun {
-    const contentType = options.contentType ?? sniffImageContentType(bytes);
-    if (!contentType) {
-      throw new Error(
-        "addImage: could not detect image content type from bytes; pass options.contentType explicitly",
-      );
-    }
-    const ext = extensionForImageContentType(contentType);
-    const partName = this.allocateImagePartName(ext);
-    addPart(this.pkg, { name: partName, contentType, data: bytes });
-    setContentTypeDefault(this.pkg.contentTypes, ext, contentType);
-
-    const docRels = this.documentRelationships();
-    const rel = addRelationship(docRels, {
-      type: WML_RELATIONSHIPS.image,
-      target: this.relativeMediaTarget(partName),
-    });
-
-    const docPrId = this.allocateDocPrId();
-    const drawing = buildInlineDrawing({
-      relId: rel.id,
-      widthEmu: options.widthEmu,
-      heightEmu: options.heightEmu,
-      docPrId,
-      ...(options.name !== undefined ? { name: options.name } : {}),
-      ...(options.altText !== undefined ? { altText: options.altText } : {}),
-    });
-    const piece: WmlRunPiece = { kind: "drawing", node: drawing };
-    this.dirty = true;
-    return { kind: "run", pieces: [piece], extras: [] };
-  }
-
-  private documentRelationships(): RelationshipSet {
-    const set = partRelationships(this.pkg, this.partName);
-    return set;
-  }
-
-  private allocateImagePartName(extension: string): string {
-    let n = 1;
-    // Find lowest unused index.
-    while (hasPart(this.pkg, `/word/media/image${n}.${extension}`)) {
-      n++;
-    }
-    return `/word/media/image${n}.${extension}`;
-  }
-
-  private relativeMediaTarget(partName: string): string {
-    // /word/document.xml relates targets relative to its own folder.
-    // /word/media/imageN.ext  →  media/imageN.ext
-    if (partName.startsWith("/word/")) return partName.slice("/word/".length);
-    return partName.startsWith("/") ? partName.slice(1) : partName;
-  }
-
-  private allocateDocPrId(): number {
-    // docPr ids must be unique across the document. We bump a counter that
-    // starts from the current max we can see in pass-through drawing nodes
-    // and from the relationships set length as a coarse upper bound.
-    return Math.max(1, allRelationships(this.documentRelationships()).length + 1);
-  }
-
-  /**
-   * Convenience access to the document title (`dc:title`). Reading returns
-   * the current value; writing replaces it via {@link setCoreProperties}.
-   */
-  get title(): string | undefined {
-    return this.coreProperties.title;
-  }
-
-  set title(value: string | undefined) {
-    if (value !== undefined) this.setCoreProperties({ title: value });
-  }
-
-  /**
-   * Convenience access to the document author / creator (`dc:creator`).
-   */
-  get author(): string | undefined {
-    return this.coreProperties.creator;
-  }
-
-  set author(value: string | undefined) {
-    if (value !== undefined) this.setCoreProperties({ creator: value });
-  }
-
-  /**
-   * Enumerate every `<w:instrText>` field instruction found in the body.
-   * Useful for inspecting what fields a template carries before deciding
-   * how to fill them.
-   */
-  get fields(): Array<{ paragraph: WmlParagraph; instruction: string }> {
-    const out: Array<{ paragraph: WmlParagraph; instruction: string }> = [];
-    const visit = (p: WmlParagraph): void => {
-      for (const child of p.children) {
-        if (child.kind === "run") {
-          for (const piece of child.pieces) {
-            if (piece.kind === "instrText") {
-              out.push({ paragraph: p, instruction: piece.value });
-            }
-          }
-        } else if (child.kind === "raw") {
-          const walk = (el: XmlElement): void => {
-            if (el.name.uri === WML_NS && el.name.local === "instrText") {
-              let acc = "";
-              for (const c of el.children) {
-                if (c.kind === "text") acc += c.value;
-                else if (c.kind === "cdata") acc += c.value;
-              }
-              out.push({ paragraph: p, instruction: acc });
-              return;
-            }
-            for (const c of el.children) if (c.kind === "element") walk(c);
-          };
-          walk(child.node);
-        }
-      }
-    };
-    for (const block of this.docModel.body.blocks) {
-      if (block.kind === "paragraph") visit(block);
-      else if (block.kind === "table") {
-        for (const row of block.rows) {
-          for (const cell of row.cells) {
-            for (const p of cell.paragraphs) visit(p);
-          }
-        }
-      }
-    }
-    return out;
-  }
-
-  /**
-   * Read the package's core document properties (title, creator, subject,
-   * etc.), parsed from `docProps/core.xml`. Returns an empty record if the
-   * part is absent.
-   */
-  get coreProperties(): DocumentCoreProperties {
-    const part = getPart(this.pkg, CORE_PROPERTIES_PART_NAME);
-    if (!part) return {};
-    const xml = new TextDecoder("utf-8").decode(part.data);
-    return parseCoreProperties(parseXml(xml));
-  }
-
-  /**
-   * Read the package's application-level document properties (Application,
-   * AppVersion, Pages, Words, Company, Manager, …) from `docProps/app.xml`.
-   * Returns an empty record if the part is absent.
-   */
-  get appProperties(): DocumentAppProperties {
-    const part = getPart(this.pkg, APP_PROPERTIES_PART_NAME);
-    if (!part) return {};
-    const xml = new TextDecoder("utf-8").decode(part.data);
-    return parseAppProperties(parseXml(xml));
-  }
-
-  /**
-   * Write application-level document properties. Creates `docProps/app.xml`
-   * and the package-level relationship on first use; subsequent calls
-   * merge into existing properties.
-   */
-  setAppProperties(props: DocumentAppProperties): void {
-    if (!hasPart(this.pkg, APP_PROPERTIES_PART_NAME)) {
-      addPart(this.pkg, {
-        name: APP_PROPERTIES_PART_NAME,
-        contentType: APP_PROPERTIES_CONTENT_TYPE,
-        data: new TextEncoder().encode(EMPTY_APP_PROPERTIES_XML),
-      });
-      const pkgRels = packageRelationships(this.pkg);
-      if (relationshipsByType(pkgRels, APP_PROPERTIES_REL_TYPE).length === 0) {
-        addRelationship(pkgRels, { type: APP_PROPERTIES_REL_TYPE, target: "docProps/app.xml" });
-      }
-    }
-    const existing = this.appProperties;
-    const merged: DocumentAppProperties = { ...existing, ...props };
-    const xml = serializeXml(writeAppProperties(merged));
-    const part = getPart(this.pkg, APP_PROPERTIES_PART_NAME);
-    if (part) part.data = new TextEncoder().encode(xml);
-  }
-
-  /**
-   * Write the package's core document properties. Creates
-   * `docProps/core.xml` and the package-level relationship on first use.
-   * Subsequent calls merge into existing properties.
-   */
-  setCoreProperties(props: DocumentCoreProperties): void {
-    if (!hasPart(this.pkg, CORE_PROPERTIES_PART_NAME)) {
-      addPart(this.pkg, {
-        name: CORE_PROPERTIES_PART_NAME,
-        contentType: CORE_PROPERTIES_CONTENT_TYPE,
-        data: new TextEncoder().encode(EMPTY_CORE_PROPERTIES_XML),
-      });
-      const pkgRels = packageRelationships(this.pkg);
-      if (relationshipsByType(pkgRels, CORE_PROPERTIES_REL_TYPE).length === 0) {
-        addRelationship(pkgRels, { type: CORE_PROPERTIES_REL_TYPE, target: "docProps/core.xml" });
-      }
-    }
-    const existing = this.coreProperties;
-    const merged: DocumentCoreProperties = { ...existing, ...props };
-    const xml = serializeXml(writeCoreProperties(merged));
-    const part = getPart(this.pkg, CORE_PROPERTIES_PART_NAME);
-    if (part) part.data = new TextEncoder().encode(xml);
-  }
-
-  /** Parsed `word/footnotes.xml` AST, or `undefined` if absent. */
-  get footnotesPart(): WmlFootnotesPart | undefined {
-    if (this.footnotesCache) return this.footnotesCache;
-    const part = getPart(this.pkg, FOOTNOTES_PART_NAME);
-    if (!part) return undefined;
-    const xml = new TextDecoder("utf-8").decode(part.data);
-    this.footnotesCache = parseFootnotesPart(parseXml(xml));
-    return this.footnotesCache;
-  }
-
-  /** Parsed `word/endnotes.xml` AST, or `undefined` if absent. */
-  get endnotesPart(): WmlFootnotesPart | undefined {
-    if (this.endnotesCache) return this.endnotesCache;
-    const part = getPart(this.pkg, ENDNOTES_PART_NAME);
-    if (!part) return undefined;
-    const xml = new TextDecoder("utf-8").decode(part.data);
-    this.endnotesCache = parseFootnotesPart(parseXml(xml));
-    return this.endnotesCache;
-  }
-
-  /**
-   * Append a footnote with the given text. Creates `footnotes.xml` (with
-   * the standard separator/continuationSeparator entries) on first use,
-   * registers the relationship from `word/document.xml`, and inserts a
-   * `<w:footnoteReference>` run at the end of the target paragraph.
-   *
-   * Returns the assigned footnote id (>=1).
-   */
-  addFootnote(paragraph: WmlParagraph, text: string): number {
-    return this.addNoteImpl(paragraph, text, "footnote");
-  }
-
-  /** Same shape as {@link addFootnote} but for endnotes. */
-  addEndnote(paragraph: WmlParagraph, text: string): number {
-    return this.addNoteImpl(paragraph, text, "endnote");
-  }
-
-  private addNoteImpl(paragraph: WmlParagraph, text: string, kind: "footnote" | "endnote"): number {
-    const part = kind === "footnote" ? this.ensureFootnotesPart() : this.ensureEndnotesPart();
-    const usedIds = new Set<number>();
-    for (const f of part.footnotes) {
-      const id = f.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id")?.value;
-      if (id !== undefined) {
-        const n = Number.parseInt(id, 10);
-        if (Number.isFinite(n)) usedIds.add(n);
-      }
-    }
-    let nextId = 1;
-    while (usedIds.has(nextId)) nextId++;
-    const note = buildFootnote({ id: nextId, text }, kind);
-    part.footnotes.push(note);
-    if (kind === "footnote") this.footnotesDirty = true;
-    else this.endnotesDirty = true;
-
-    // Insert a reference run at the end of the paragraph.
-    paragraph.children.push({
-      kind: "raw",
-      node: buildFootnoteReferenceRun(
-        nextId,
-        kind === "footnote" ? "footnoteReference" : "endnoteReference",
-      ),
-    });
-    this.dirty = true;
-    return nextId;
-  }
-
-  private ensureFootnotesPart(): WmlFootnotesPart {
-    const existing = this.footnotesPart;
-    if (existing) return existing;
-    addPart(this.pkg, {
-      name: FOOTNOTES_PART_NAME,
-      contentType: WML_CONTENT_TYPES.footnotes,
-      data: new TextEncoder().encode(SEED_FOOTNOTES_XML),
-    });
-    const docRels = partRelationships(this.pkg, this.partName);
-    if (relationshipsByType(docRels, WML_RELATIONSHIPS.footnotes).length === 0) {
-      addRelationship(docRels, { type: WML_RELATIONSHIPS.footnotes, target: "footnotes.xml" });
-    }
-    const xml = new TextDecoder("utf-8").decode(
-      getPart(this.pkg, FOOTNOTES_PART_NAME)?.data ?? new Uint8Array(),
-    );
-    this.footnotesCache = parseFootnotesPart(parseXml(xml));
-    this.footnotesDirty = true;
-    return this.footnotesCache;
-  }
-
-  private ensureEndnotesPart(): WmlFootnotesPart {
-    const existing = this.endnotesPart;
-    if (existing) return existing;
-    addPart(this.pkg, {
-      name: ENDNOTES_PART_NAME,
-      contentType: WML_CONTENT_TYPES.endnotes,
-      data: new TextEncoder().encode(SEED_ENDNOTES_XML),
-    });
-    const docRels = partRelationships(this.pkg, this.partName);
-    if (relationshipsByType(docRels, WML_RELATIONSHIPS.endnotes).length === 0) {
-      addRelationship(docRels, { type: WML_RELATIONSHIPS.endnotes, target: "endnotes.xml" });
-    }
-    const xml = new TextDecoder("utf-8").decode(
-      getPart(this.pkg, ENDNOTES_PART_NAME)?.data ?? new Uint8Array(),
-    );
-    this.endnotesCache = parseFootnotesPart(parseXml(xml));
-    this.endnotesDirty = true;
-    return this.endnotesCache;
-  }
-
-  /** Parsed `word/comments.xml` AST, or `undefined` if absent. */
-  get commentsPart(): WmlCommentsPart | undefined {
-    if (this.commentsCache) return this.commentsCache;
-    const part = getPart(this.pkg, COMMENTS_PART_NAME);
-    if (!part) return undefined;
-    const xml = new TextDecoder("utf-8").decode(part.data);
-    this.commentsCache = parseCommentsPart(parseXml(xml));
-    return this.commentsCache;
-  }
-
-  /**
-   * Attach a comment to the given paragraph. The comment range covers the
-   * entire paragraph: `<w:commentRangeStart>` is inserted at the start,
-   * `<w:commentRangeEnd>` plus a `<w:commentReference>` icon run at the
-   * end. The comment body is stored in `word/comments.xml`.
-   *
-   * Returns the assigned comment id.
-   */
-  addComment(paragraph: WmlParagraph, options: AddCommentOptions): number {
-    const part = this.ensureCommentsPart();
-    const usedIds = new Set<number>();
-    for (const c of part.comments) {
-      const id = c.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id")?.value;
-      if (id !== undefined) {
-        const n = Number.parseInt(id, 10);
-        if (Number.isFinite(n)) usedIds.add(n);
-      }
-    }
-    let nextId = 0;
-    while (usedIds.has(nextId)) nextId++;
-    const comment = buildComment({
-      id: nextId,
-      author: options.author,
-      text: options.text,
-      ...(options.initials !== undefined ? { initials: options.initials } : {}),
-      ...(options.date !== undefined ? { date: options.date } : {}),
-    });
-    part.comments.push(comment);
-    this.commentsDirty = true;
-
-    // Wrap the paragraph's inline children with rangeStart/rangeEnd+ref.
-    paragraph.children = [
-      { kind: "raw", node: buildCommentRangeStart(nextId) },
-      ...paragraph.children,
-      { kind: "raw", node: buildCommentRangeEnd(nextId) },
-      { kind: "raw", node: buildCommentReferenceRun(nextId) },
-    ];
-    this.dirty = true;
-    return nextId;
-  }
-
-  private ensureCommentsPart(): WmlCommentsPart {
-    const existing = this.commentsPart;
-    if (existing) return existing;
-    addPart(this.pkg, {
-      name: COMMENTS_PART_NAME,
-      contentType: WML_CONTENT_TYPES.comments,
-      data: new TextEncoder().encode(EMPTY_COMMENTS_XML),
-    });
-    const docRels = partRelationships(this.pkg, this.partName);
-    if (relationshipsByType(docRels, WML_RELATIONSHIPS.comments).length === 0) {
-      addRelationship(docRels, { type: WML_RELATIONSHIPS.comments, target: "comments.xml" });
-    }
-    const xml = new TextDecoder("utf-8").decode(
-      getPart(this.pkg, COMMENTS_PART_NAME)?.data ?? new Uint8Array(),
-    );
-    this.commentsCache = parseCommentsPart(parseXml(xml));
-    this.commentsDirty = true;
-    return this.commentsCache;
-  }
-
-  /**
-   * Add a header part with the given text and wire it to the body's
-   * trailing `<w:sectPr>`. Creates the sectPr if missing.
-   *
-   * Returns the relationship id assigned to the header part.
-   */
-  addHeader(text: string, type: HeaderFooterType = "default"): string {
-    const partName = this.allocateHeaderPartName();
-    const xml = buildHeaderXml(text);
-    addPart(this.pkg, {
-      name: partName,
-      contentType: WML_CONTENT_TYPES.header,
-      data: new TextEncoder().encode(xml),
-    });
-    const docRels = partRelationships(this.pkg, this.partName);
-    const rel = addRelationship(docRels, {
-      type: WML_RELATIONSHIPS.header,
-      target: this.targetRelativeToDoc(partName),
-    });
-    const sectPr = this.ensureBodySectPr();
-    addSectPrHeaderRef(sectPr, type, rel.id);
-    this.dirty = true;
-    return rel.id;
-  }
-
-  /**
-   * Add a footer that displays a centered PAGE field with optional
-   * surrounding text. Word renders the live page number when the document
-   * is opened.
-   */
-  addPageNumberFooter(prefix = "", suffix = "", type: HeaderFooterType = "default"): string {
-    const partName = this.allocateFooterPartName();
-    const xml = buildPageNumberFooterXml(prefix, suffix);
-    addPart(this.pkg, {
-      name: partName,
-      contentType: WML_CONTENT_TYPES.footer,
-      data: new TextEncoder().encode(xml),
-    });
-    const docRels = partRelationships(this.pkg, this.partName);
-    const rel = addRelationship(docRels, {
-      type: WML_RELATIONSHIPS.footer,
-      target: this.targetRelativeToDoc(partName),
-    });
-    const sectPr = this.ensureBodySectPr();
-    addSectPrFooterRef(sectPr, type, rel.id);
-    this.dirty = true;
-    return rel.id;
-  }
-
-  /**
-   * Append a complex field (PAGE, NUMPAGES, DATE, MERGEFIELD …) to the
-   * end of the given paragraph. The output is the canonical
-   * `fldChar begin/instrText/separate/display/fldChar end` run sequence.
-   */
-  appendField(paragraph: WmlParagraph, instruction: string, displayText = ""): void {
-    for (const run of buildFieldRuns(instruction, displayText)) {
-      paragraph.children.push({ kind: "raw", node: run });
-    }
-    this.dirty = true;
-  }
-
-  /** Like {@link addHeader} but for a footer. */
-  addFooter(text: string, type: HeaderFooterType = "default"): string {
-    const partName = this.allocateFooterPartName();
-    const xml = buildFooterXml(text);
-    addPart(this.pkg, {
-      name: partName,
-      contentType: WML_CONTENT_TYPES.footer,
-      data: new TextEncoder().encode(xml),
-    });
-    const docRels = partRelationships(this.pkg, this.partName);
-    const rel = addRelationship(docRels, {
-      type: WML_RELATIONSHIPS.footer,
-      target: this.targetRelativeToDoc(partName),
-    });
-    const sectPr = this.ensureBodySectPr();
-    addSectPrFooterRef(sectPr, type, rel.id);
-    this.dirty = true;
-    return rel.id;
-  }
-
-  /** Set the page size on the body's trailing `<w:sectPr>`. */
-  setPageSize(size: PageSize): void {
-    const sectPr = this.ensureBodySectPr();
-    setSectPrPageSize(sectPr, size);
-    this.dirty = true;
-  }
-
-  /** Set the page margins on the body's trailing `<w:sectPr>`. */
-  setPageMargins(margins: PageMargins): void {
-    const sectPr = this.ensureBodySectPr();
-    setSectPrPageMargins(sectPr, margins);
-    this.dirty = true;
-  }
-
-  /** Switch the page orientation (portrait/landscape) on the body sectPr. */
-  setPageOrientation(orientation: "portrait" | "landscape"): void {
-    const sectPr = this.ensureBodySectPr();
-    const pgSz = sectPr.children.find(
-      (c): c is XmlElement => c.kind === "element" && c.name.local === "pgSz",
-    );
-    if (pgSz) {
-      // Swap width/height when toggling orientation if needed.
-      const wAttr = pgSz.attrs.find((a) => a.name.local === "w");
-      const hAttr = pgSz.attrs.find((a) => a.name.local === "h");
-      const widthTwips = wAttr ? Number.parseInt(wAttr.value, 10) : PAGE_SIZE_LETTER.widthTwips;
-      const heightTwips = hAttr ? Number.parseInt(hAttr.value, 10) : PAGE_SIZE_LETTER.heightTwips;
-      // For landscape, width > height; for portrait, height > width.
-      const isLandscape = orientation === "landscape";
-      const newWidth = isLandscape
-        ? Math.max(widthTwips, heightTwips)
-        : Math.min(widthTwips, heightTwips);
-      const newHeight = isLandscape
-        ? Math.min(widthTwips, heightTwips)
-        : Math.max(widthTwips, heightTwips);
-      setSectPrPageSize(sectPr, { widthTwips: newWidth, heightTwips: newHeight, orientation });
-    } else {
-      setSectPrPageSize(sectPr, { ...PAGE_SIZE_LETTER, orientation });
-    }
-    this.dirty = true;
-  }
-
-  private ensureBodySectPr(): XmlElement {
-    if (this.docModel.body.sectPr) return this.docModel.body.sectPr;
-    const sectPr: XmlElement = {
-      kind: "element",
-      name: { uri: WML_NS, local: "sectPr", prefix: "w" },
-      attrs: [],
-      children: [
-        {
-          kind: "element",
-          name: { uri: WML_NS, local: "pgSz", prefix: "w" },
-          attrs: [
-            {
-              name: { uri: WML_NS, local: "w", prefix: "w" },
-              value: "12240",
-              isNamespaceDecl: false,
-            },
-            {
-              name: { uri: WML_NS, local: "h", prefix: "w" },
-              value: "15840",
-              isNamespaceDecl: false,
-            },
-          ],
-          children: [],
-          xmlSpace: "default",
-          selfClosing: true,
-        },
-      ],
-      xmlSpace: "default",
-      selfClosing: false,
-    };
-    this.docModel.body.sectPr = sectPr;
-    return sectPr;
-  }
-
-  private allocateHeaderPartName(): string {
-    let n = 1;
-    while (hasPart(this.pkg, `/word/header${n}.xml`)) n++;
-    return `/word/header${n}.xml`;
-  }
-
-  private allocateFooterPartName(): string {
-    let n = 1;
-    while (hasPart(this.pkg, `/word/footer${n}.xml`)) n++;
-    return `/word/footer${n}.xml`;
-  }
-
-  private targetRelativeToDoc(partName: string): string {
-    if (partName.startsWith("/word/")) return partName.slice("/word/".length);
-    return partName.startsWith("/") ? partName.slice(1) : partName;
-  }
-
-  /**
-   * Serialize to a `Blob` with the `.docx` MIME type. Works in any
-   * environment where `Blob` is a global (modern browsers and Node 18+).
-   */
-  toBlob(): Blob {
-    const bytes = this.toUint8Array();
-    // Slice into a fresh ArrayBuffer view to satisfy BlobPart's invariance
-    // over ArrayBuffer (the TS lib treats SharedArrayBuffer-backed views as
-    // incompatible).
-    const buf = bytes.buffer.slice(
-      bytes.byteOffset,
-      bytes.byteOffset + bytes.byteLength,
-    ) as ArrayBuffer;
-    return new Blob([new Uint8Array(buf)], {
-      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    });
-  }
-
-  /**
-   * Run structural validation on the underlying package. Catches the most
-   * common "Word needs to repair the file" causes (missing rel targets,
-   * unmatched comment / footnote / endnote ids, broken bookmark pairs,
-   * missing media parts). Returns the issues; never throws.
-   */
-  validate(): ValidationIssue[] {
-    if (this.dirty) {
-      this.flushDocument();
-      this.dirty = false;
-    }
-    if (this.stylesDirty && this.stylesCache) {
-      this.flushStyles(this.stylesCache);
-      this.stylesDirty = false;
-    }
-    if (this.numberingDirty && this.numberingCache) {
-      this.flushNumbering(this.numberingCache);
-      this.numberingDirty = false;
-    }
-    if (this.commentsDirty && this.commentsCache) {
-      this.flushComments(this.commentsCache);
-      this.commentsDirty = false;
-    }
-    if (this.footnotesDirty && this.footnotesCache) {
-      this.flushNotes(this.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
-      this.footnotesDirty = false;
-    }
-    if (this.endnotesDirty && this.endnotesCache) {
-      this.flushNotes(this.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
-      this.endnotesDirty = false;
-    }
-    return validatePackage(this.pkg);
-  }
-
-  /**
-   * Coarse content statistics: paragraph / table / image / comment /
-   * footnote / endnote counts, plus rough word and character counts
-   * based on the body's visible text.
-   */
-  get statistics(): {
-    paragraphs: number;
-    tables: number;
-    images: number;
-    comments: number;
-    footnotes: number;
-    endnotes: number;
-    headings: number;
-    words: number;
-    characters: number;
-    charactersNoSpaces: number;
-  } {
-    const paragraphs = this.paragraphs.length;
-    const tables = this.tables.length;
-    const images = this.images.length;
-    const comments = this.commentsPart?.comments.length ?? 0;
-    const footnotes = Math.max(0, (this.footnotesPart?.footnotes.length ?? 0) - 2);
-    const endnotes = Math.max(0, (this.endnotesPart?.footnotes.length ?? 0) - 2);
-    const headings = this.outline().length;
-    const text = this.text;
-    const wordsArr = text.split(/\s+/).filter((w) => w.length > 0);
-    return {
-      paragraphs,
-      tables,
-      images,
-      comments,
-      footnotes,
-      endnotes,
-      headings,
-      words: wordsArr.length,
-      characters: text.length,
-      charactersNoSpaces: text.replace(/\s/g, "").length,
-    };
-  }
-
-  /**
-   * Produce an independent copy of this document. The two documents share
-   * no mutable state — edits to one do not affect the other.
-   *
-   * Internally this serializes and re-reads, which incurs a ZIP round-trip
-   * but is the cleanest way to guarantee a deep copy across both the OPC
-   * package and the WML AST.
-   */
-  clone(): Docx {
-    return Docx.open(this.toUint8Array());
-  }
-
-  /** Serialize the package back to `.docx` bytes. */
-  toUint8Array(): Uint8Array {
-    if (this.dirty) {
-      this.flushDocument();
-      this.dirty = false;
-    }
-    if (this.stylesDirty && this.stylesCache) {
-      this.flushStyles(this.stylesCache);
-      this.stylesDirty = false;
-    }
-    if (this.numberingDirty && this.numberingCache) {
-      this.flushNumbering(this.numberingCache);
-      this.numberingDirty = false;
-    }
-    if (this.commentsDirty && this.commentsCache) {
-      this.flushComments(this.commentsCache);
-      this.commentsDirty = false;
-    }
-    if (this.footnotesDirty && this.footnotesCache) {
-      this.flushNotes(this.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
-      this.footnotesDirty = false;
-    }
-    if (this.endnotesDirty && this.endnotesCache) {
-      this.flushNotes(this.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
-      this.endnotesDirty = false;
-    }
-    return writeOpcPackage(this.pkg);
-  }
-
-  private flushNotes(
-    part: WmlFootnotesPart,
-    partName: string,
-    rootLocal: "footnotes" | "endnotes",
-  ): void {
-    const xmlDoc = writeFootnotesPart(part, rootLocal);
-    const xmlText = serializeXml(xmlDoc);
-    const xmlPart = getPart(this.pkg, partName);
-    if (!xmlPart) return;
-    xmlPart.data = new TextEncoder().encode(xmlText);
-  }
-
-  private flushComments(part: WmlCommentsPart): void {
-    const xmlDoc = writeCommentsPart(part);
-    const xmlText = serializeXml(xmlDoc);
-    const commentsPart = getPart(this.pkg, COMMENTS_PART_NAME);
-    if (!commentsPart) return;
-    commentsPart.data = new TextEncoder().encode(xmlText);
-  }
-
-  private flushNumbering(part: WmlNumberingPart): void {
-    const xmlDoc = writeNumberingPart(part);
-    const xmlText = serializeXml(xmlDoc);
-    const numberingPart = getPart(this.pkg, NUMBERING_PART_NAME);
-    if (!numberingPart) return;
-    numberingPart.data = new TextEncoder().encode(xmlText);
-  }
-
-  private flushDocument(): void {
-    const xmlDoc = writeWmlDocument(this.docModel);
-    const xmlText = serializeXml(xmlDoc);
-    const part = getPart(this.pkg, this.partName);
-    if (!part) {
-      throw new Error(`Lost document part: ${this.partName}`);
-    }
-    part.data = new TextEncoder().encode(xmlText);
-  }
-
-  private flushStyles(stylesPart: WmlStylesPart): void {
-    const xmlDoc = writeStylesPart(stylesPart);
-    const xmlText = serializeXml(xmlDoc);
-    const part = getPart(this.pkg, STYLES_PART_NAME);
-    if (!part) return;
-    part.data = new TextEncoder().encode(xmlText);
-  }
+    ],
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  doc.document.body.sectPr = sectPr;
+  return sectPr;
+}
+
+function allocateHeaderPartName(doc: Docx): string {
+  let n = 1;
+  while (hasPart(doc.opc, `/word/header${n}.xml`)) n++;
+  return `/word/header${n}.xml`;
+}
+
+function allocateFooterPartName(doc: Docx): string {
+  let n = 1;
+  while (hasPart(doc.opc, `/word/footer${n}.xml`)) n++;
+  return `/word/footer${n}.xml`;
+}
+
+function targetRelativeToDoc(doc: Docx, partName: string): string {
+  if (partName.startsWith("/word/")) return partName.slice("/word/".length);
+  return partName.startsWith("/") ? partName.slice(1) : partName;
+}
+
+/**
+ * Serialize to a `Blob` with the `.docx` MIME type. Works in any
+ * environment where `Blob` is a global (modern browsers and Node 18+).
+ */
+export function toBlob(doc: Docx): Blob {
+  const bytes = toUint8Array(doc);
+  // Slice into a fresh ArrayBuffer view to satisfy BlobPart's invariance
+  // over ArrayBuffer (the TS lib treats SharedArrayBuffer-backed views as
+  // incompatible).
+  const buf = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  return new Blob([new Uint8Array(buf)], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+}
+
+/**
+ * Run structural validation on the underlying package. Catches the most
+ * common "Word needs to repair the file" causes (missing rel targets,
+ * unmatched comment / footnote / endnote ids, broken bookmark pairs,
+ * missing media parts). Returns the issues; never throws.
+ */
+export function validate(doc: Docx): ValidationIssue[] {
+  if (doc.dirty) {
+    flushDocument(doc);
+    doc.dirty = false;
+  }
+  if (doc.stylesDirty && doc.stylesCache) {
+    flushStyles(doc, doc.stylesCache);
+    doc.stylesDirty = false;
+  }
+  if (doc.numberingDirty && doc.numberingCache) {
+    flushNumbering(doc, doc.numberingCache);
+    doc.numberingDirty = false;
+  }
+  if (doc.commentsDirty && doc.commentsCache) {
+    flushComments(doc, doc.commentsCache);
+    doc.commentsDirty = false;
+  }
+  if (doc.footnotesDirty && doc.footnotesCache) {
+    flushNotes(doc, doc.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
+    doc.footnotesDirty = false;
+  }
+  if (doc.endnotesDirty && doc.endnotesCache) {
+    flushNotes(doc, doc.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
+    doc.endnotesDirty = false;
+  }
+  return validatePackage(doc.opc);
+}
+
+/**
+ * Coarse content statistics: paragraph / table / image / comment /
+ * footnote / endnote counts, plus rough word and character counts
+ * based on the body's visible text.
+ */
+export function statistics(doc: Docx): {
+  paragraphs: number;
+  tables: number;
+  images: number;
+  comments: number;
+  footnotes: number;
+  endnotes: number;
+  headings: number;
+  words: number;
+  characters: number;
+  charactersNoSpaces: number;
+} {
+  const paragraphsCount = paragraphs(doc).length;
+  const tablesCount = tables(doc).length;
+  const imagesCount = images(doc).length;
+  const commentsCount = commentsPart(doc)?.comments.length ?? 0;
+  const footnotesCount = Math.max(0, (footnotesPart(doc)?.footnotes.length ?? 0) - 2);
+  const endnotesCount = Math.max(0, (endnotesPart(doc)?.footnotes.length ?? 0) - 2);
+  const headingsCount = outline(doc).length;
+  const docText = text(doc);
+  const wordsArr = docText.split(/\s+/).filter((w) => w.length > 0);
+  return {
+    paragraphs: paragraphsCount,
+    tables: tablesCount,
+    images: imagesCount,
+    comments: commentsCount,
+    footnotes: footnotesCount,
+    endnotes: endnotesCount,
+    headings: headingsCount,
+    words: wordsArr.length,
+    characters: docText.length,
+    charactersNoSpaces: docText.replace(/\s/g, "").length,
+  };
+}
+
+/**
+ * Produce an independent copy of this document. The two documents share
+ * no mutable state — edits to one do not affect the other.
+ *
+ * Internally this serializes and re-reads, which incurs a ZIP round-trip
+ * but is the cleanest way to guarantee a deep copy across both the OPC
+ * package and the WML AST.
+ */
+export function clone(doc: Docx): Docx {
+  return openDocx(toUint8Array(doc));
+}
+
+/** Serialize the package back to `.docx` bytes. */
+export function toUint8Array(doc: Docx): Uint8Array {
+  if (doc.dirty) {
+    flushDocument(doc);
+    doc.dirty = false;
+  }
+  if (doc.stylesDirty && doc.stylesCache) {
+    flushStyles(doc, doc.stylesCache);
+    doc.stylesDirty = false;
+  }
+  if (doc.numberingDirty && doc.numberingCache) {
+    flushNumbering(doc, doc.numberingCache);
+    doc.numberingDirty = false;
+  }
+  if (doc.commentsDirty && doc.commentsCache) {
+    flushComments(doc, doc.commentsCache);
+    doc.commentsDirty = false;
+  }
+  if (doc.footnotesDirty && doc.footnotesCache) {
+    flushNotes(doc, doc.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
+    doc.footnotesDirty = false;
+  }
+  if (doc.endnotesDirty && doc.endnotesCache) {
+    flushNotes(doc, doc.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
+    doc.endnotesDirty = false;
+  }
+  return writeOpcPackage(doc.opc);
+}
+
+function flushNotes(
+  doc: Docx,
+  part: WmlFootnotesPart,
+  partName: string,
+  rootLocal: "footnotes" | "endnotes",
+): void {
+  const xmlDoc = writeFootnotesPart(part, rootLocal);
+  const xmlText = serializeXml(xmlDoc);
+  const xmlPart = getPart(doc.opc, partName);
+  if (!xmlPart) return;
+  xmlPart.data = new TextEncoder().encode(xmlText);
+}
+
+function flushComments(doc: Docx, part: WmlCommentsPart): void {
+  const xmlDoc = writeCommentsPart(part);
+  const xmlText = serializeXml(xmlDoc);
+  const commentsPart = getPart(doc.opc, COMMENTS_PART_NAME);
+  if (!commentsPart) return;
+  commentsPart.data = new TextEncoder().encode(xmlText);
+}
+
+function flushNumbering(doc: Docx, part: WmlNumberingPart): void {
+  const xmlDoc = writeNumberingPart(part);
+  const xmlText = serializeXml(xmlDoc);
+  const numberingPart = getPart(doc.opc, NUMBERING_PART_NAME);
+  if (!numberingPart) return;
+  numberingPart.data = new TextEncoder().encode(xmlText);
+}
+
+function flushDocument(doc: Docx): void {
+  const xmlDoc = writeWmlDocument(doc.document);
+  const xmlText = serializeXml(xmlDoc);
+  const part = getPart(doc.opc, doc.partName);
+  if (!part) {
+    throw new Error(`Lost document part: ${doc.partName}`);
+  }
+  part.data = new TextEncoder().encode(xmlText);
+}
+
+function flushStyles(doc: Docx, stylesPart: WmlStylesPart): void {
+  const xmlDoc = writeStylesPart(stylesPart);
+  const xmlText = serializeXml(xmlDoc);
+  const part = getPart(doc.opc, STYLES_PART_NAME);
+  if (!part) return;
+  part.data = new TextEncoder().encode(xmlText);
 }
 
 function wmlEmptyEl(local: string) {

@@ -1,30 +1,37 @@
 import { hasPart, partRelationships, relationshipsByType } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import {
+  addComment,
+  commentsPart,
+  createDocx,
+  openDocx,
+  paragraphs,
+  toUint8Array,
+} from "./docx.js";
 
 describe("Docx.addComment", () => {
   it("creates comments.xml + comment entry and wraps the target paragraph", () => {
-    const doc = Docx.create({ paragraphs: ["Hello world"] });
-    const para = doc.paragraphs[0];
+    const doc = createDocx({ paragraphs: ["Hello world"] });
+    const para = paragraphs(doc)[0];
     expect(para).toBeDefined();
     if (!para) return;
-    const id = doc.addComment(para, {
+    const id = addComment(doc, para, {
       author: "Reviewer",
       initials: "R",
       text: "Please double-check this.",
     });
     expect(id).toBe(0);
     expect(hasPart(doc.opc, "/word/comments.xml")).toBe(true);
-    const cp = doc.commentsPart;
+    const cp = commentsPart(doc);
     expect(cp).toBeDefined();
     expect(cp?.comments).toHaveLength(1);
   });
 
   it("inserts commentRangeStart/End and commentReference around the paragraph", () => {
-    const doc = Docx.create({ paragraphs: ["Hello world"] });
-    const para = doc.paragraphs[0];
+    const doc = createDocx({ paragraphs: ["Hello world"] });
+    const para = paragraphs(doc)[0];
     if (!para) return;
-    doc.addComment(para, { author: "R", text: "x" });
+    addComment(doc, para, { author: "R", text: "x" });
     const localNames = para.children.map((c) =>
       c.kind === "raw" ? c.node.name.local : c.kind === "run" ? "r" : c.kind,
     );
@@ -34,10 +41,10 @@ describe("Docx.addComment", () => {
   });
 
   it("registers a comments relationship from word/document.xml", () => {
-    const doc = Docx.create({ paragraphs: ["Hello"] });
-    const para = doc.paragraphs[0];
+    const doc = createDocx({ paragraphs: ["Hello"] });
+    const para = paragraphs(doc)[0];
     if (!para) return;
-    doc.addComment(para, { author: "R", text: "x" });
+    addComment(doc, para, { author: "R", text: "x" });
     const rels = partRelationships(doc.opc, "/word/document.xml");
     const commentRels = relationshipsByType(
       rels,
@@ -47,21 +54,21 @@ describe("Docx.addComment", () => {
   });
 
   it("save+reopen preserves the comment", () => {
-    const doc = Docx.create({ paragraphs: ["body"] });
-    const para = doc.paragraphs[0];
+    const doc = createDocx({ paragraphs: ["body"] });
+    const para = paragraphs(doc)[0];
     if (!para) return;
-    doc.addComment(para, { author: "Reviewer", text: "Looks good." });
-    const bytes = doc.toUint8Array();
-    const reopened = Docx.open(bytes);
-    expect(reopened.commentsPart).toBeDefined();
-    expect(reopened.commentsPart?.comments).toHaveLength(1);
+    addComment(doc, para, { author: "Reviewer", text: "Looks good." });
+    const bytes = toUint8Array(doc);
+    const reopened = openDocx(bytes);
+    expect(commentsPart(reopened)).toBeDefined();
+    expect(commentsPart(reopened)?.comments).toHaveLength(1);
   });
 
   it("assigns incremental ids when multiple comments are added", () => {
-    const doc = Docx.create({ paragraphs: ["a", "b"] });
-    const [p1, p2] = doc.paragraphs;
+    const doc = createDocx({ paragraphs: ["a", "b"] });
+    const [p1, p2] = paragraphs(doc);
     if (!p1 || !p2) return;
-    expect(doc.addComment(p1, { author: "R", text: "1" })).toBe(0);
-    expect(doc.addComment(p2, { author: "R", text: "2" })).toBe(1);
+    expect(addComment(doc, p1, { author: "R", text: "1" })).toBe(0);
+    expect(addComment(doc, p2, { author: "R", text: "2" })).toBe(1);
   });
 });

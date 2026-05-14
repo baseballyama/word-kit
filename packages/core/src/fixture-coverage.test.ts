@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import { openDocx, paragraphs, text, toUint8Array } from "./docx.js";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../..");
 const FIXTURE_DIR = resolve(REPO_ROOT, "references/mammoth.js/test/test-data");
@@ -18,12 +18,12 @@ describe("mammoth.js fixture corpus: open + round-trip parity", () => {
   for (const name of all) {
     it(`opens and re-saves ${name} losslessly at the paragraph level`, () => {
       const bytes = readFileSync(resolve(FIXTURE_DIR, name));
-      const doc = Docx.open(bytes);
-      const paragraphsBefore = doc.paragraphs.length;
-      const textBefore = doc.text;
-      const reopened = Docx.open(doc.toUint8Array());
-      expect(reopened.paragraphs.length).toBe(paragraphsBefore);
-      expect(reopened.text).toBe(textBefore);
+      const doc = openDocx(bytes);
+      const paragraphsBefore = paragraphs(doc).length;
+      const textBefore = text(doc);
+      const reopened = openDocx(toUint8Array(doc));
+      expect(paragraphs(reopened).length).toBe(paragraphsBefore);
+      expect(text(reopened)).toBe(textBefore);
     });
   }
 });

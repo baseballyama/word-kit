@@ -1,15 +1,24 @@
 import { getPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import {
+  addBookmark,
+  addInternalHyperlink,
+  appendPageBreak,
+  appendParagraph,
+  createDocx,
+  openDocx,
+  paragraphs,
+  toUint8Array,
+} from "./docx.js";
 
 describe("Docx.appendPageBreak", () => {
   it("adds a paragraph with a page-break run", () => {
-    const doc = Docx.create({ paragraphs: ["before"] });
-    doc.appendPageBreak();
-    doc.appendParagraph("after");
-    expect(doc.paragraphs).toHaveLength(3);
-    const bytes = doc.toUint8Array();
-    const reopened = Docx.open(bytes);
+    const doc = createDocx({ paragraphs: ["before"] });
+    appendPageBreak(doc);
+    appendParagraph(doc, "after");
+    expect(paragraphs(doc)).toHaveLength(3);
+    const bytes = toUint8Array(doc);
+    const reopened = openDocx(bytes);
     const part = getPart(reopened.opc, "/word/document.xml");
     const xml = new TextDecoder().decode(part?.data ?? new Uint8Array());
     expect(xml).toContain('<w:br w:type="page"/>');
@@ -18,13 +27,13 @@ describe("Docx.appendPageBreak", () => {
 
 describe("Docx.addBookmark + addInternalHyperlink", () => {
   it("places bookmarkStart/End around a paragraph and an anchor hyperlink to it", () => {
-    const doc = Docx.create({ paragraphs: ["chapter heading"] });
-    const target = doc.paragraphs[0];
+    const doc = createDocx({ paragraphs: ["chapter heading"] });
+    const target = paragraphs(doc)[0];
     if (!target) return;
-    const id = doc.addBookmark("ch1", target);
+    const id = addBookmark(doc, "ch1", target);
     expect(id).toBe(0);
-    doc.appendParagraph("body");
-    doc.addInternalHyperlink("ch1", "Jump to Chapter 1");
+    appendParagraph(doc, "body");
+    addInternalHyperlink(doc, "ch1", "Jump to Chapter 1");
 
     // Verify start/end placement
     const first = target.children[0];
@@ -35,7 +44,7 @@ describe("Docx.addBookmark + addInternalHyperlink", () => {
     if (last?.kind === "raw") expect(last.node.name.local).toBe("bookmarkEnd");
 
     // Verify save+reopen preserves both
-    const reopened = Docx.open(doc.toUint8Array());
+    const reopened = openDocx(toUint8Array(doc));
     const part = getPart(reopened.opc, "/word/document.xml");
     const xml = new TextDecoder().decode(part?.data ?? new Uint8Array());
     expect(xml).toContain('w:name="ch1"');
@@ -43,12 +52,12 @@ describe("Docx.addBookmark + addInternalHyperlink", () => {
   });
 
   it("allocates non-overlapping bookmark ids across multiple calls", () => {
-    const doc = Docx.create({ paragraphs: ["a", "b", "c"] });
-    const [p1, p2, p3] = doc.paragraphs;
+    const doc = createDocx({ paragraphs: ["a", "b", "c"] });
+    const [p1, p2, p3] = paragraphs(doc);
     if (!p1 || !p2 || !p3) return;
-    const id1 = doc.addBookmark("a", p1);
-    const id2 = doc.addBookmark("b", p2);
-    const id3 = doc.addBookmark("c", p3);
+    const id1 = addBookmark(doc, "a", p1);
+    const id2 = addBookmark(doc, "b", p2);
+    const id3 = addBookmark(doc, "c", p3);
     expect(new Set([id1, id2, id3]).size).toBe(3);
   });
 });

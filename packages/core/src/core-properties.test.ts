@@ -1,16 +1,16 @@
 import { hasPart, packageRelationships, relationshipsByType } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import { coreProperties, createDocx, openDocx, setCoreProperties, toUint8Array } from "./docx.js";
 
 describe("Docx core properties", () => {
   it("returns an empty record when the package has no docProps/core.xml", () => {
-    const doc = Docx.create();
-    expect(doc.coreProperties).toEqual({});
+    const doc = createDocx();
+    expect(coreProperties(doc)).toEqual({});
   });
 
   it("setCoreProperties creates the part on first use", () => {
-    const doc = Docx.create();
-    doc.setCoreProperties({
+    const doc = createDocx();
+    setCoreProperties(doc, {
       title: "Quarterly Report",
       creator: "Yamada",
       subject: "Sales",
@@ -29,10 +29,10 @@ describe("Docx core properties", () => {
   });
 
   it("round-trips properties through save+reopen", () => {
-    const doc = Docx.create();
-    doc.setCoreProperties({ title: "T", creator: "C", description: "D" });
-    const reopened = Docx.open(doc.toUint8Array());
-    expect(reopened.coreProperties).toMatchObject({
+    const doc = createDocx();
+    setCoreProperties(doc, { title: "T", creator: "C", description: "D" });
+    const reopened = openDocx(toUint8Array(doc));
+    expect(coreProperties(reopened)).toMatchObject({
       title: "T",
       creator: "C",
       description: "D",
@@ -40,9 +40,9 @@ describe("Docx core properties", () => {
   });
 
   it("merges new properties with existing ones", () => {
-    const doc = Docx.create();
-    doc.setCoreProperties({ title: "First" });
-    doc.setCoreProperties({ creator: "Author" });
-    expect(doc.coreProperties).toMatchObject({ title: "First", creator: "Author" });
+    const doc = createDocx();
+    setCoreProperties(doc, { title: "First" });
+    setCoreProperties(doc, { creator: "Author" });
+    expect(coreProperties(doc)).toMatchObject({ title: "First", creator: "Author" });
   });
 });

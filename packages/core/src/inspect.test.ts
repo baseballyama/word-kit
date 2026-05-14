@@ -1,6 +1,17 @@
 import { getPart } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import {
+  addFooter,
+  addHeader,
+  addImage,
+  createDocx,
+  footers,
+  headers,
+  images,
+  openDocx,
+  replaceImage,
+  toUint8Array,
+} from "./docx.js";
 
 const TINY_PNG = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
@@ -16,19 +27,19 @@ const OTHER_PNG = new Uint8Array([
 
 describe("Docx.headers / Docx.footers", () => {
   it("enumerates header parts with their text content", () => {
-    const doc = Docx.create({ paragraphs: ["body"] });
-    doc.addHeader("Hello Header");
-    doc.addHeader("Second", "first");
-    const heads = doc.headers;
+    const doc = createDocx({ paragraphs: ["body"] });
+    addHeader(doc, "Hello Header");
+    addHeader(doc, "Second", "first");
+    const heads = headers(doc);
     expect(heads).toHaveLength(2);
     expect(heads[0]?.text).toContain("Hello Header");
     expect(heads[1]?.text).toContain("Second");
   });
 
   it("enumerates footer parts with their text content", () => {
-    const doc = Docx.create({ paragraphs: ["body"] });
-    doc.addFooter("Page Footer");
-    const foots = doc.footers;
+    const doc = createDocx({ paragraphs: ["body"] });
+    addFooter(doc, "Page Footer");
+    const foots = footers(doc);
     expect(foots).toHaveLength(1);
     expect(foots[0]?.text).toContain("Page Footer");
   });
@@ -36,29 +47,29 @@ describe("Docx.headers / Docx.footers", () => {
 
 describe("Docx.images / Docx.replaceImage", () => {
   it("lists media parts and returns each part's bytes", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.addImage(TINY_PNG, { widthEmu: 1000, heightEmu: 1000 });
-    const images = doc.images;
-    expect(images).toHaveLength(1);
-    expect(images[0]?.partName).toBe("/word/media/image1.png");
-    expect(images[0]?.contentType).toBe("image/png");
-    expect(images[0]?.data.length).toBe(TINY_PNG.length);
+    const doc = createDocx({ paragraphs: [] });
+    addImage(doc, TINY_PNG, { widthEmu: 1000, heightEmu: 1000 });
+    const imgs = images(doc);
+    expect(imgs).toHaveLength(1);
+    expect(imgs[0]?.partName).toBe("/word/media/image1.png");
+    expect(imgs[0]?.contentType).toBe("image/png");
+    expect(imgs[0]?.data.length).toBe(TINY_PNG.length);
   });
 
   it("replaces an existing image's bytes in place", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.addImage(TINY_PNG, { widthEmu: 1000, heightEmu: 1000 });
-    expect(doc.replaceImage("/word/media/image1.png", OTHER_PNG)).toBe(true);
+    const doc = createDocx({ paragraphs: [] });
+    addImage(doc, TINY_PNG, { widthEmu: 1000, heightEmu: 1000 });
+    expect(replaceImage(doc, "/word/media/image1.png", OTHER_PNG)).toBe(true);
     const part = getPart(doc.opc, "/word/media/image1.png");
     expect(part?.data.length).toBe(OTHER_PNG.length);
 
     // Survives save+reopen with the new bytes:
-    const reopened = Docx.open(doc.toUint8Array());
+    const reopened = openDocx(toUint8Array(doc));
     expect(getPart(reopened.opc, "/word/media/image1.png")?.data.length).toBe(OTHER_PNG.length);
   });
 
   it("replaceImage returns false for unknown parts", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    expect(doc.replaceImage("/word/media/imageXX.png", OTHER_PNG)).toBe(false);
+    const doc = createDocx({ paragraphs: [] });
+    expect(replaceImage(doc, "/word/media/imageXX.png", OTHER_PNG)).toBe(false);
   });
 });

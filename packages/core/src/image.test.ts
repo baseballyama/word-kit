@@ -1,6 +1,13 @@
 import { hasPart, partRelationships, relationshipsByType } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import {
+  addImage,
+  createDocx,
+  insertImageInto,
+  openDocx,
+  paragraphs,
+  toUint8Array,
+} from "./docx.js";
 
 // A 1x1 transparent PNG.
 const TINY_PNG = new Uint8Array([
@@ -13,11 +20,11 @@ const TINY_PNG = new Uint8Array([
 
 describe("Docx.insertImageInto", () => {
   it("appends an image run to an existing paragraph", () => {
-    const doc = Docx.create({ paragraphs: ["Logo:"] });
-    const para = doc.paragraphs[0];
+    const doc = createDocx({ paragraphs: ["Logo:"] });
+    const para = paragraphs(doc)[0];
     if (!para) return;
     const childrenBefore = para.children.length;
-    doc.insertImageInto(para, TINY_PNG, { widthEmu: 914400, heightEmu: 914400 });
+    insertImageInto(doc, para, TINY_PNG, { widthEmu: 914400, heightEmu: 914400 });
     expect(para.children.length).toBe(childrenBefore + 1);
     expect(hasPart(doc.opc, "/word/media/image1.png")).toBe(true);
   });
@@ -25,10 +32,10 @@ describe("Docx.insertImageInto", () => {
 
 describe("Docx.addImage", () => {
   it("attaches an image as /word/media/imageN.png and adds a rel", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.addImage(TINY_PNG, { widthEmu: 914400, heightEmu: 914400 });
-    const bytes = doc.toUint8Array();
-    const reopened = Docx.open(bytes);
+    const doc = createDocx({ paragraphs: [] });
+    addImage(doc, TINY_PNG, { widthEmu: 914400, heightEmu: 914400 });
+    const bytes = toUint8Array(doc);
+    const reopened = openDocx(bytes);
     expect(hasPart(reopened.opc, "/word/media/image1.png")).toBe(true);
     const rels = partRelationships(reopened.opc, "/word/document.xml");
     const imageRels = relationshipsByType(
@@ -40,11 +47,11 @@ describe("Docx.addImage", () => {
   });
 
   it("emits a <w:drawing> inside the inserted paragraph", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.addImage(TINY_PNG, { widthEmu: 914400, heightEmu: 914400, altText: "test alt" });
-    const bytes = doc.toUint8Array();
-    const reopened = Docx.open(bytes);
-    const para = reopened.paragraphs[0];
+    const doc = createDocx({ paragraphs: [] });
+    addImage(doc, TINY_PNG, { widthEmu: 914400, heightEmu: 914400, altText: "test alt" });
+    const bytes = toUint8Array(doc);
+    const reopened = openDocx(bytes);
+    const para = paragraphs(reopened)[0];
     expect(para).toBeDefined();
     const run = para?.children[0];
     expect(run?.kind).toBe("run");
@@ -54,24 +61,24 @@ describe("Docx.addImage", () => {
   });
 
   it("allocates fresh part names when called multiple times", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.addImage(TINY_PNG, { widthEmu: 100000, heightEmu: 100000 });
-    doc.addImage(TINY_PNG, { widthEmu: 100000, heightEmu: 100000 });
-    const bytes = doc.toUint8Array();
-    const reopened = Docx.open(bytes);
+    const doc = createDocx({ paragraphs: [] });
+    addImage(doc, TINY_PNG, { widthEmu: 100000, heightEmu: 100000 });
+    addImage(doc, TINY_PNG, { widthEmu: 100000, heightEmu: 100000 });
+    const bytes = toUint8Array(doc);
+    const reopened = openDocx(bytes);
     expect(hasPart(reopened.opc, "/word/media/image1.png")).toBe(true);
     expect(hasPart(reopened.opc, "/word/media/image2.png")).toBe(true);
   });
 
   it("throws if the content type cannot be detected and none is supplied", () => {
-    const doc = Docx.create({ paragraphs: [] });
+    const doc = createDocx({ paragraphs: [] });
     const garbage = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
-    expect(() => doc.addImage(garbage, { widthEmu: 100, heightEmu: 100 })).toThrow();
+    expect(() => addImage(doc, garbage, { widthEmu: 100, heightEmu: 100 })).toThrow();
   });
 
   it("accepts an explicit content type override", () => {
-    const doc = Docx.create({ paragraphs: [] });
-    doc.addImage(new Uint8Array([1, 2, 3]), {
+    const doc = createDocx({ paragraphs: [] });
+    addImage(doc, new Uint8Array([1, 2, 3]), {
       widthEmu: 100,
       heightEmu: 100,
       contentType: "image/png",

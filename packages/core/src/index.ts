@@ -4,12 +4,7 @@
  * @packageDocumentation
  */
 
-export {
-  type AddImageOptions,
-  type AppendParagraphOptions,
-  Docx,
-  type DocxCreateOptions,
-} from "./docx.js";
+export * from "./docx.js";
 export { type ValidationIssue, validatePackage } from "./validator.js";
 export {
   appendTableRow,

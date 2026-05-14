@@ -1,16 +1,16 @@
 import { hasPart, packageRelationships, relationshipsByType } from "@word-kit/opc";
 import { describe, expect, it } from "vitest";
-import { Docx } from "./docx.js";
+import { appProperties, createDocx, openDocx, setAppProperties, toUint8Array } from "./docx.js";
 
 describe("Docx app properties", () => {
   it("returns an empty record when no app.xml is present", () => {
-    const doc = Docx.create();
-    expect(doc.appProperties).toEqual({});
+    const doc = createDocx();
+    expect(appProperties(doc)).toEqual({});
   });
 
   it("setAppProperties creates docProps/app.xml + rel on first use", () => {
-    const doc = Docx.create();
-    doc.setAppProperties({
+    const doc = createDocx();
+    setAppProperties(doc, {
       application: "word-kit",
       appVersion: "0.1.0",
       pages: 5,
@@ -27,15 +27,15 @@ describe("Docx app properties", () => {
   });
 
   it("round-trips through save+reopen", () => {
-    const doc = Docx.create();
-    doc.setAppProperties({
+    const doc = createDocx();
+    setAppProperties(doc, {
       application: "word-kit",
       appVersion: "0.1.0",
       words: 42,
       manager: "Yamada",
     });
-    const reopened = Docx.open(doc.toUint8Array());
-    expect(reopened.appProperties).toMatchObject({
+    const reopened = openDocx(toUint8Array(doc));
+    expect(appProperties(reopened)).toMatchObject({
       application: "word-kit",
       appVersion: "0.1.0",
       words: 42,
@@ -44,9 +44,9 @@ describe("Docx app properties", () => {
   });
 
   it("merges new properties with existing ones", () => {
-    const doc = Docx.create();
-    doc.setAppProperties({ application: "first" });
-    doc.setAppProperties({ pages: 3 });
-    expect(doc.appProperties).toMatchObject({ application: "first", pages: 3 });
+    const doc = createDocx();
+    setAppProperties(doc, { application: "first" });
+    setAppProperties(doc, { pages: 3 });
+    expect(appProperties(doc)).toMatchObject({ application: "first", pages: 3 });
   });
 });

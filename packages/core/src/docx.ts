@@ -22,6 +22,7 @@ import {
   buildCommentRangeEnd,
   buildCommentRangeStart,
   buildCommentReferenceRun,
+  buildFieldRuns,
   buildFootnote,
   buildFootnoteReferenceRun,
   buildFooterXml,
@@ -30,6 +31,7 @@ import {
   buildHyperlinkRun,
   buildInlineDrawing,
   buildNum,
+  buildPageNumberFooterXml,
   buildPPrWithNumPr,
   type BuildStyleOptions,
   buildStyle,
@@ -1532,6 +1534,42 @@ export class Docx {
     addSectPrHeaderRef(sectPr, type, rel.id);
     this.dirty = true;
     return rel.id;
+  }
+
+  /**
+   * Add a footer that displays a centered PAGE field with optional
+   * surrounding text. Word renders the live page number when the document
+   * is opened.
+   */
+  addPageNumberFooter(prefix = "", suffix = "", type: HeaderFooterType = "default"): string {
+    const partName = this.allocateFooterPartName();
+    const xml = buildPageNumberFooterXml(prefix, suffix);
+    this.pkg.addPart({
+      name: partName,
+      contentType: WML_CONTENT_TYPES.footer,
+      data: new TextEncoder().encode(xml),
+    });
+    const docRels = this.pkg.partRelationships(this.partName);
+    const rel = docRels.add({
+      type: WML_RELATIONSHIPS.footer,
+      target: this.targetRelativeToDoc(partName),
+    });
+    const sectPr = this.ensureBodySectPr();
+    addSectPrFooterRef(sectPr, type, rel.id);
+    this.dirty = true;
+    return rel.id;
+  }
+
+  /**
+   * Append a complex field (PAGE, NUMPAGES, DATE, MERGEFIELD …) to the
+   * end of the given paragraph. The output is the canonical
+   * `fldChar begin/instrText/separate/display/fldChar end` run sequence.
+   */
+  appendField(paragraph: WmlParagraph, instruction: string, displayText = ""): void {
+    for (const run of buildFieldRuns(instruction, displayText)) {
+      paragraph.children.push({ kind: "raw", node: run });
+    }
+    this.dirty = true;
   }
 
   /** Like {@link addHeader} but for a footer. */

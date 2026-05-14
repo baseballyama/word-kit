@@ -38,6 +38,12 @@ export {
   type InlineDrawingOptions,
   sniffImageContentType,
 } from "./drawing.js";
+export {
+  buildFieldRuns,
+  buildPageNumberFooterXml,
+  buildSimpleField,
+  WORD_FIELDS,
+} from "./fields.js";
 export { type BuildHyperlinkOptions, buildHyperlink, buildHyperlinkRun } from "./hyperlink.js";
 export {
   type BuildCommentOptions,

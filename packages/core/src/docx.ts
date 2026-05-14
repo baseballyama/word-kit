@@ -9,15 +9,21 @@ import {
 } from "@word-kit/opc";
 import {
   buildInlineDrawing,
+  type BuildStyleOptions,
+  buildStyle,
   buildTextTable,
   type BuildTableOptions,
   documentText,
   extensionForImageContentType,
+  findStyle,
   findText,
+  MINIMAL_STYLES_XML,
+  parseStylesPart,
   parseWmlDocument,
   replaceText,
   sniffImageContentType,
   type TextMatch,
+  WML_CONTENT_TYPES,
   WML_NS,
   WML_RELATIONSHIPS,
   type WmlBlock,
@@ -25,7 +31,9 @@ import {
   type WmlParagraph,
   type WmlRun,
   type WmlRunPiece,
+  type WmlStylesPart,
   type WmlTable,
+  writeStylesPart,
   writeWmlDocument,
 } from "@word-kit/wml";
 
@@ -73,11 +81,15 @@ export interface AppendParagraphOptions {
  * The lower-level building blocks are still reachable via the {@link opc}
  * and {@link document} accessors when callers need fine-grained control.
  */
+const STYLES_PART_NAME = "/word/styles.xml";
+
 export class Docx {
   private readonly pkg: OpcPackage;
   private readonly docModel: WmlDocument;
   private readonly partName: string;
   private dirty = false;
+  private stylesCache: WmlStylesPart | undefined;
+  private stylesDirty = false;
 
   private constructor(pkg: OpcPackage, doc: WmlDocument, partName: string) {
     this.pkg = pkg;
@@ -104,6 +116,16 @@ export class Docx {
     if (!docPart) {
       throw new Error("Minimal docx is missing /word/document.xml");
     }
+    // Seed a minimal but valid styles.xml so the produced docx opens cleanly
+    // in both Word and LibreOffice without an "uses an unknown style" prompt.
+    pkg.addPart({
+      name: STYLES_PART_NAME,
+      contentType: WML_CONTENT_TYPES.styles,
+      data: new TextEncoder().encode(MINIMAL_STYLES_XML),
+    });
+    const docRels = pkg.partRelationships(DOCUMENT_PART_FALLBACK);
+    docRels.add({ type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
+
     const xml = new TextDecoder("utf-8").decode(docPart.data);
     const wml = parseWmlDocument(parseXml(xml));
     const docx = new Docx(pkg, wml, docPart.name);
@@ -135,6 +157,58 @@ export class Docx {
   /** Table blocks in document order. */
   get tables(): readonly WmlTable[] {
     return this.docModel.body.blocks.filter(isTable);
+  }
+
+  /**
+   * Parsed `word/styles.xml` AST, or `undefined` if the package has no
+   * styles part. Lazily parsed on first access; subsequent mutations are
+   * flushed back on `toUint8Array()`.
+   */
+  get stylesPart(): WmlStylesPart | undefined {
+    if (this.stylesCache) return this.stylesCache;
+    const part = this.pkg.getPart(STYLES_PART_NAME);
+    if (!part) return undefined;
+    const xml = new TextDecoder("utf-8").decode(part.data);
+    this.stylesCache = parseStylesPart(parseXml(xml));
+    return this.stylesCache;
+  }
+
+  /**
+   * Add (or replace) a `<w:style>` entry. Creates `word/styles.xml` and
+   * its relationship if they do not already exist.
+   */
+  addStyle(options: BuildStyleOptions): void {
+    const part = this.ensureStylesPart();
+    const existing = findStyle(part, options.styleId);
+    const built = buildStyle(options);
+    if (existing) {
+      const idx = part.styles.indexOf(existing);
+      if (idx >= 0) part.styles[idx] = built;
+    } else {
+      part.styles.push(built);
+    }
+    this.stylesDirty = true;
+  }
+
+  private ensureStylesPart(): WmlStylesPart {
+    const existing = this.stylesPart;
+    if (existing) return existing;
+    this.pkg.addPart({
+      name: STYLES_PART_NAME,
+      contentType: WML_CONTENT_TYPES.styles,
+      data: new TextEncoder().encode(MINIMAL_STYLES_XML),
+    });
+    const docRels = this.pkg.partRelationships(this.partName);
+    const hasStylesRel = docRels.byType(WML_RELATIONSHIPS.styles).length > 0;
+    if (!hasStylesRel) {
+      docRels.add({ type: WML_RELATIONSHIPS.styles, target: "styles.xml" });
+    }
+    const xml = new TextDecoder("utf-8").decode(
+      this.pkg.getPart(STYLES_PART_NAME)?.data ?? new Uint8Array(),
+    );
+    this.stylesCache = parseStylesPart(parseXml(xml));
+    this.stylesDirty = true;
+    return this.stylesCache;
   }
 
   /**
@@ -334,6 +408,10 @@ export class Docx {
       this.flushDocument();
       this.dirty = false;
     }
+    if (this.stylesDirty && this.stylesCache) {
+      this.flushStyles(this.stylesCache);
+      this.stylesDirty = false;
+    }
     return this.pkg.write();
   }
 
@@ -344,6 +422,14 @@ export class Docx {
     if (!part) {
       throw new Error(`Lost document part: ${this.partName}`);
     }
+    part.data = new TextEncoder().encode(xmlText);
+  }
+
+  private flushStyles(stylesPart: WmlStylesPart): void {
+    const xmlDoc = writeStylesPart(stylesPart);
+    const xmlText = serializeXml(xmlDoc);
+    const part = this.pkg.getPart(STYLES_PART_NAME);
+    if (!part) return;
     part.data = new TextEncoder().encode(xmlText);
   }
 }

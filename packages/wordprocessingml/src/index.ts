@@ -27,6 +27,22 @@ export {
   sniffImageContentType,
 } from "./drawing.js";
 export { parseWmlDocument } from "./parser.js";
+export { type BuildStyleOptions, buildStyle, MINIMAL_STYLES_XML } from "./style-builders.js";
+export {
+  findStyle,
+  isDefaultStyle,
+  isQFormat,
+  parseStylesPart,
+  styleBasedOn,
+  styleId,
+  styleLink,
+  styleName,
+  styleNext,
+  styleType,
+  type WmlStylesPart,
+  type WmlStyleType,
+  writeStylesPart,
+} from "./styles.js";
 export {
   documentText,
   findInParagraph,

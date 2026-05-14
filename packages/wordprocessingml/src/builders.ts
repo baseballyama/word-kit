@@ -589,6 +589,86 @@ export function getRunFormat(run: WmlRun): RunFormatting {
   return out as RunFormatting;
 }
 
+/**
+ * Collapse runs in `paragraph` that are immediately adjacent and share
+ * the same `<w:rPr>`. Only runs whose pieces are entirely text /
+ * delText / tab / break (no drawings, instrText, etc.) are eligible —
+ * special pieces stop the merge boundary. Other inline children
+ * (`<w:hyperlink>`, raw passthroughs, …) interrupt adjacency.
+ *
+ * Returns the number of merges performed. The merged run is the earlier
+ * one — the later run is removed and its pieces appended.
+ *
+ * Useful after templating has fragmented a paragraph into many tiny
+ * runs that share the same formatting (Word's spell-checker is the
+ * common culprit).
+ */
+export function mergeAdjacentRuns(paragraph: WmlParagraph): number {
+  let merges = 0;
+  const out: typeof paragraph.children = [];
+  for (const child of paragraph.children) {
+    const prev = out[out.length - 1];
+    if (
+      child.kind === "run" &&
+      prev &&
+      prev.kind === "run" &&
+      isMergeableRun(child) &&
+      isMergeableRun(prev) &&
+      sameRPr(prev, child)
+    ) {
+      prev.pieces.push(...child.pieces);
+      merges++;
+      continue;
+    }
+    out.push(child);
+  }
+  paragraph.children = out;
+  return merges;
+}
+
+function isSafeRunPiece(p: WmlRunPiece): boolean {
+  return p.kind === "text" || p.kind === "delText" || p.kind === "tab" || p.kind === "break";
+}
+
+function isMergeableRun(r: WmlRun): boolean {
+  return r.extras.length === 0 && r.pieces.every(isSafeRunPiece);
+}
+
+function sameRPr(a: WmlRun, b: WmlRun): boolean {
+  if (a.rPr === undefined && b.rPr === undefined) return true;
+  if (a.rPr === undefined || b.rPr === undefined) return false;
+  return elementsEqual(a.rPr, b.rPr);
+}
+
+function elementsEqual(a: XmlElement, b: XmlElement): boolean {
+  if (a.name.uri !== b.name.uri || a.name.local !== b.name.local) return false;
+  if (a.attrs.length !== b.attrs.length) return false;
+  // Attribute order isn't semantic, but for rPr comparison Word treats
+  // ordering as cosmetic — we compare attrs as an unordered set keyed by
+  // namespaced name + value.
+  const aKeys = a.attrs.map((x) => `${x.name.uri}|${x.name.local}=${x.value}`).toSorted();
+  const bKeys = b.attrs.map((x) => `${x.name.uri}|${x.name.local}=${x.value}`).toSorted();
+  for (let i = 0; i < aKeys.length; i++) if (aKeys[i] !== bKeys[i]) return false;
+  if (a.children.length !== b.children.length) return false;
+  for (let i = 0; i < a.children.length; i++) {
+    const ca = a.children[i];
+    const cb = b.children[i];
+    if (!ca || !cb || ca.kind !== cb.kind) return false;
+    if (ca.kind === "element" && cb.kind === "element") {
+      if (!elementsEqual(ca, cb)) return false;
+    } else if (ca.kind === "text" && cb.kind === "text") {
+      if (ca.value !== cb.value) return false;
+    } else if (ca.kind === "cdata" && cb.kind === "cdata") {
+      if (ca.value !== cb.value) return false;
+    } else {
+      // Comments / PIs in rPr are exotic enough that we treat them as
+      // "not equal" rather than try to compare in detail.
+      return false;
+    }
+  }
+  return true;
+}
+
 export type ParagraphAlignment = "left" | "center" | "right" | "both" | "distribute";
 
 /** Set the paragraph's `<w:jc w:val="..."/>` justification. */

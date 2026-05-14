@@ -15,6 +15,7 @@ export {
   getParagraphStyle,
   getRunFormat,
   getTableCellText,
+  mergeAdjacentRuns,
   type HeaderFooterType,
   MARGINS_NORMAL,
   PAGE_SIZE_A4,

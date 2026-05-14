@@ -86,6 +86,7 @@ import {
   writeWmlDocument,
 } from "@word-kit/wml";
 import type { XmlElement, XmlNode } from "@word-kit/ooxml-xml";
+import { type ValidationIssue, validatePackage } from "./validator.js";
 
 const DOCUMENT_PART_FALLBACK = "/word/document.xml";
 
@@ -1573,6 +1574,80 @@ export class Docx {
     return new Blob([new Uint8Array(buf)], {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
+  }
+
+  /**
+   * Run structural validation on the underlying package. Catches the most
+   * common "Word needs to repair the file" causes (missing rel targets,
+   * unmatched comment / footnote / endnote ids, broken bookmark pairs,
+   * missing media parts). Returns the issues; never throws.
+   */
+  validate(): ValidationIssue[] {
+    if (this.dirty) {
+      this.flushDocument();
+      this.dirty = false;
+    }
+    if (this.stylesDirty && this.stylesCache) {
+      this.flushStyles(this.stylesCache);
+      this.stylesDirty = false;
+    }
+    if (this.numberingDirty && this.numberingCache) {
+      this.flushNumbering(this.numberingCache);
+      this.numberingDirty = false;
+    }
+    if (this.commentsDirty && this.commentsCache) {
+      this.flushComments(this.commentsCache);
+      this.commentsDirty = false;
+    }
+    if (this.footnotesDirty && this.footnotesCache) {
+      this.flushNotes(this.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
+      this.footnotesDirty = false;
+    }
+    if (this.endnotesDirty && this.endnotesCache) {
+      this.flushNotes(this.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
+      this.endnotesDirty = false;
+    }
+    return validatePackage(this.pkg);
+  }
+
+  /**
+   * Coarse content statistics: paragraph / table / image / comment /
+   * footnote / endnote counts, plus rough word and character counts
+   * based on the body's visible text.
+   */
+  get statistics(): {
+    paragraphs: number;
+    tables: number;
+    images: number;
+    comments: number;
+    footnotes: number;
+    endnotes: number;
+    headings: number;
+    words: number;
+    characters: number;
+    charactersNoSpaces: number;
+  } {
+    const paragraphs = this.paragraphs.length;
+    const tables = this.tables.length;
+    const images = this.images.length;
+    const comments = this.commentsPart?.comments.length ?? 0;
+    const footnotes = Math.max(0, (this.footnotesPart?.footnotes.length ?? 0) - 2);
+    const endnotes = Math.max(0, (this.endnotesPart?.footnotes.length ?? 0) - 2);
+    const headings = this.outline().length;
+    const text = this.text;
+    const wordsArr = text.split(/\s+/).filter((w) => w.length > 0);
+    return {
+      paragraphs,
+      tables,
+      images,
+      comments,
+      footnotes,
+      endnotes,
+      headings,
+      words: wordsArr.length,
+      characters: text.length,
+      charactersNoSpaces: text.replace(/\s/g, "").length,
+    };
   }
 
   /** Serialize the package back to `.docx` bytes. */

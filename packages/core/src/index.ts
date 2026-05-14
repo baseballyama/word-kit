@@ -10,6 +10,7 @@ export {
   Docx,
   type DocxCreateOptions,
 } from "./docx.js";
+export { type ValidationIssue, validatePackage } from "./validator.js";
 export {
   appendTextRun,
   getParagraphAlignment,

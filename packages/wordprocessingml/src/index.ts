@@ -21,6 +21,7 @@ export {
   buildTextParagraph,
   buildTextRun,
   buildTextTable,
+  clearRunFormat,
   getParagraphAlignment,
   getParagraphNumbering,
   getParagraphStyle,
@@ -34,6 +35,7 @@ export {
   setParagraphIndent,
   setParagraphSpacing,
   setParagraphText,
+  setRunFormat,
   setTableCellText,
 } from "./builders.js";
 export {

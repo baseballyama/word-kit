@@ -9,6 +9,7 @@ export { type ValidationIssue, validatePackage } from "./validator.js";
 export {
   appendTableRow,
   appendTextRun,
+  clearRunFormat,
   getParagraphAlignment,
   getParagraphNumbering,
   getParagraphStyle,
@@ -28,6 +29,7 @@ export {
   setParagraphIndent,
   setParagraphSpacing,
   setParagraphText,
+  setRunFormat,
   setTableCellText,
 } from "@word-kit/wml";
 // Re-export types that are part of the public surface area so consumers can

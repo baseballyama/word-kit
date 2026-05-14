@@ -206,6 +206,117 @@ export function appendTextRun(
   return run;
 }
 
+/**
+ * Apply formatting to an existing run, replacing any matching `<w:rPr>`
+ * children. Properties left `undefined` are not touched, so this is a
+ * patch — call `clearRunFormat` first if you want a full reset.
+ *
+ * Boolean flags (`bold`, `italic`, `strike`) accept `false` to remove
+ * the corresponding `<w:b/>` / `<w:i/>` / `<w:strike/>` element.
+ * `underline: "none"` removes `<w:u/>`. Setting a value to a string or
+ * number replaces (or inserts) the relevant rPr child while preserving
+ * the run's other rPr children, including formatting the library
+ * doesn't yet model.
+ */
+export function setRunFormat(run: WmlRun, formatting: RunFormatting): void {
+  if (
+    formatting.bold === undefined &&
+    formatting.italic === undefined &&
+    formatting.strike === undefined &&
+    formatting.underline === undefined &&
+    formatting.color === undefined &&
+    formatting.highlight === undefined &&
+    formatting.fontSizeHalfPoints === undefined &&
+    formatting.font === undefined &&
+    formatting.fontEastAsia === undefined
+  ) {
+    return;
+  }
+  const rPr: XmlElement = run.rPr ?? {
+    kind: "element",
+    name: { uri: WML_NS, local: "rPr", prefix: "w" },
+    attrs: [],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  const children = rPr.children as XmlElement[];
+
+  const removeLocal = (local: string): void => {
+    for (let i = children.length - 1; i >= 0; i--) {
+      const c = children[i];
+      if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === local) {
+        children.splice(i, 1);
+      }
+    }
+  };
+  const setEmpty = (local: string, attrs: XmlAttr[]): void => {
+    removeLocal(local);
+    children.push(wmlEmpty(local, attrs));
+  };
+
+  if (formatting.bold !== undefined) {
+    if (formatting.bold) setEmpty("b", []);
+    else removeLocal("b");
+  }
+  if (formatting.italic !== undefined) {
+    if (formatting.italic) setEmpty("i", []);
+    else removeLocal("i");
+  }
+  if (formatting.strike !== undefined) {
+    if (formatting.strike) setEmpty("strike", []);
+    else removeLocal("strike");
+  }
+  if (formatting.underline !== undefined) {
+    if (formatting.underline === "none") removeLocal("u");
+    else setEmpty("u", [wmlAttr("val", formatting.underline)]);
+  }
+  if (formatting.color !== undefined) {
+    setEmpty("color", [wmlAttr("val", formatting.color)]);
+  }
+  if (formatting.highlight !== undefined) {
+    setEmpty("highlight", [wmlAttr("val", formatting.highlight)]);
+  }
+  if (formatting.fontSizeHalfPoints !== undefined) {
+    setEmpty("sz", [wmlAttr("val", String(formatting.fontSizeHalfPoints))]);
+    setEmpty("szCs", [wmlAttr("val", String(formatting.fontSizeHalfPoints))]);
+  }
+  if (formatting.font !== undefined || formatting.fontEastAsia !== undefined) {
+    // Build/replace <w:rFonts>. Preserve any attrs the caller didn't override.
+    const existing = children.find(
+      (c): c is XmlElement => c.kind === "element" && c.name.local === "rFonts",
+    );
+    const attrs: XmlAttr[] = existing ? existing.attrs.slice() : [];
+    const setAttr = (local: string, value: string): void => {
+      const idx = attrs.findIndex((a) => a.name.local === local);
+      const next = wmlAttr(local, value);
+      if (idx >= 0) attrs[idx] = next;
+      else attrs.push(next);
+    };
+    if (formatting.font !== undefined) {
+      setAttr("ascii", formatting.font);
+      setAttr("hAnsi", formatting.font);
+    }
+    if (formatting.fontEastAsia !== undefined) {
+      setAttr("eastAsia", formatting.fontEastAsia);
+    }
+    removeLocal("rFonts");
+    children.push(wmlEmpty("rFonts", attrs));
+  }
+
+  if (!run.rPr && children.length > 0) {
+    run.rPr = rPr;
+  }
+}
+
+/**
+ * Drop the run's entire `<w:rPr>` block, leaving the run text unformatted
+ * (it picks up the document/paragraph default style).
+ */
+export function clearRunFormat(run: WmlRun): void {
+  delete run.rPr;
+}
+
 export type ParagraphAlignment = "left" | "center" | "right" | "both" | "distribute";
 
 /** Set the paragraph's `<w:jc w:val="..."/>` justification. */

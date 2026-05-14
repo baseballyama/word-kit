@@ -832,6 +832,16 @@ export class Docx {
     return partName.startsWith("/") ? partName.slice(1) : partName;
   }
 
+  /**
+   * Serialize to a `Blob` with the `.docx` MIME type. Works in any
+   * environment where `Blob` is a global (modern browsers and Node 18+).
+   */
+  toBlob(): Blob {
+    return new Blob([this.toUint8Array()], {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+  }
+
   /** Serialize the package back to `.docx` bytes. */
   toUint8Array(): Uint8Array {
     if (this.dirty) {

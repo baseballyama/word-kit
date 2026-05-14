@@ -458,6 +458,45 @@ export function addStyle(doc: Docx, options: BuildStyleOptions): void {
 }
 
 /**
+ * Remove a `<w:style>` entry by its `w:styleId`. Returns true if a style
+ * with that id existed and was removed. Note that paragraphs and runs
+ * referencing the removed style by `w:pStyle` / `w:rStyle` are NOT
+ * scrubbed — they will fall back to the Normal style in Word, which is
+ * usually the intended behaviour. Use {@link validate} afterwards to
+ * surface dangling references as warnings.
+ */
+export function removeStyle(doc: Docx, styleId: string): boolean {
+  const part = stylesPart(doc);
+  if (!part) return false;
+  const existing = findStyle(part, styleId);
+  if (!existing) return false;
+  const idx = part.styles.indexOf(existing);
+  if (idx < 0) return false;
+  part.styles.splice(idx, 1);
+  doc.stylesDirty = true;
+  return true;
+}
+
+/**
+ * Enumerate every `<w:style>` entry in `word/styles.xml`. Each item
+ * carries the style id and the `w:type` attribute (paragraph, character,
+ * table, or numbering). Returns an empty array if the package has no
+ * styles part.
+ */
+export function listStyles(doc: Docx): Array<{ styleId: string; type: string }> {
+  const part = stylesPart(doc);
+  if (!part) return [];
+  const out: Array<{ styleId: string; type: string }> = [];
+  for (const style of part.styles) {
+    const idAttr = style.attrs.find((a) => a.name.local === "styleId");
+    const typeAttr = style.attrs.find((a) => a.name.local === "type");
+    if (!idAttr) continue;
+    out.push({ styleId: idAttr.value, type: typeAttr?.value ?? "" });
+  }
+  return out;
+}
+
+/**
  * Parsed `word/numbering.xml` AST, or `undefined` if absent. Lazy and
  * cached just like {@link stylesPart}.
  */

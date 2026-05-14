@@ -7,8 +7,10 @@ browsers and Node.js.
 - Open an existing `.docx` as a template, edit it, and serialize it back.
 - Target: **full WordprocessingML coverage** of ECMA-376 Part 1.
 
-> Status: pre-1.0 / scaffold. The public API will move before v1. See
-> [`CLAUDE.md`](./CLAUDE.md) for engineering principles and scope rules.
+> Status: pre-1.0. Core functionality (`Docx.open` / `Docx.create` /
+> `toUint8Array`) is stable; details may shift before v1.
+> See [`CLAUDE.md`](./CLAUDE.md) for engineering principles and scope rules
+> and [`PLAN.md`](./PLAN.md) for the milestone roadmap.
 
 ## Install
 
@@ -21,17 +23,31 @@ pnpm add @word-kit/core
 Node-only dependencies and works in browsers (including with the `Blob` and
 `File` APIs).
 
-## Quick start (planned API)
+## Quick start
 
 ```ts
-// API is a placeholder until v0.1. See CHANGELOG / changesets for the actual
-// shape once published.
-import { Document } from "@word-kit/core";
+import { Docx, PAGE_SIZE_A4 } from "@word-kit/core";
 
-const doc = new Document();
-doc.addParagraph("Hello, world.");
+// From scratch
+const doc = Docx.create({ paragraphs: ["Hello, world."] });
+doc.appendParagraph("Bullets:");
+doc.addBulletList(["one", "two", "three"]);
+doc.addTable([
+  ["Name", "Score"],
+  ["Alice", "90"],
+]);
+doc.setPageSize(PAGE_SIZE_A4);
 const bytes = await doc.toUint8Array();
+
+// From an existing .docx template
+const tpl = Docx.open(existingDocxBytes);
+tpl.replaceTextEverywhere(/\{\{(\w+)\}\}/g, (m) => values[m.captures[0]!] ?? "");
+const out = await tpl.toUint8Array();
 ```
+
+See [`packages/core/README.md`](./packages/core/README.md) for the full API
+walkthrough (images, comments, footnotes, headers/footers, bookmarks,
+hyperlinks, tracked changes, core document properties).
 
 ## Scope
 
@@ -57,8 +73,10 @@ will be redirected to a more appropriate library. See [`CLAUDE.md`](./CLAUDE.md)
 ```
 .
 ├── packages/
-│   ├── core/                 # @word-kit/core — public entry point
-│   └── opc/                  # @word-kit/opc  — OPC packaging (internal)
+│   ├── core/             # @word-kit/core      — public Docx wrapper
+│   ├── opc/              # @word-kit/opc       — OPC (ZIP + Content Types + rels)
+│   ├── ooxml-xml/        # @word-kit/ooxml-xml — namespace-aware XML parser/serializer
+│   └── wordprocessingml/ # @word-kit/wml       — WML AST + parsers + builders
 ├── docs/
 │   └── specs/                # Distilled spec notes + ECMA-376 fetcher target
 ├── references/               # External OSS / spec material (submodules)
@@ -68,6 +86,7 @@ will be redirected to a more appropriate library. See [`CLAUDE.md`](./CLAUDE.md)
 ├── .github/                  # Issue / PR templates and CI / release workflows
 ├── .claude/skills/           # Workflow guides for Claude Code agents
 ├── CLAUDE.md                 # Engineering principles for contributors and AI
+├── PLAN.md                   # Living implementation plan + progress table
 ├── SECURITY.md               # Private vulnerability reporting
 ├── .oxlintrc.json            # oxlint config
 └── .oxfmtrc.json             # oxfmt config (Prettier-compatible)

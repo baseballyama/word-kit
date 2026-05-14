@@ -1,4 +1,6 @@
-import type { WmlDocument, WmlParagraph, WmlRunPiece } from "./types.js";
+import type { XmlElement } from "@word-kit/ooxml-xml";
+import { WML_NS } from "./namespaces.js";
+import type { WmlBlock, WmlDocument, WmlInline, WmlParagraph, WmlRunPiece } from "./types.js";
 
 /**
  * A successful match against the flattened text of a paragraph.
@@ -217,22 +219,71 @@ function getTextPiece(p: WmlParagraph, ref: TextRef): (WmlRunPiece & { kind: "te
 }
 
 /**
- * Return the concatenated text content of a paragraph (the same string used
- * for find/replace, ignoring tabs/breaks/drawings and unrecognized inlines).
+ * Return the concatenated visible text content of a paragraph.
+ *
+ * Includes text inside structured runs (`<w:t>`), nested hyperlinks
+ * (`<w:hyperlink>...<w:r><w:t>...`), structured-document tags
+ * (`<w:sdt>`), tracked-change insertions (`<w:ins>`) and deletions
+ * (`<w:del>`). Drawing/picture/break/tab content is ignored.
  */
 export function paragraphText(p: WmlParagraph): string {
-  return flattenParagraph(p).flat;
+  let acc = "";
+  for (const child of p.children) {
+    acc += visibleTextOfInline(child);
+  }
+  return acc;
+}
+
+function visibleTextOfInline(inline: WmlInline): string {
+  if (inline.kind === "run") {
+    let acc = "";
+    for (const piece of inline.pieces) {
+      if (piece.kind === "text" || piece.kind === "delText") acc += piece.value;
+    }
+    return acc;
+  }
+  return visibleTextOfElement(inline.node);
+}
+
+function visibleTextOfElement(el: XmlElement): string {
+  let acc = "";
+  for (const child of el.children) {
+    if (child.kind === "element") {
+      if (
+        child.name.uri === WML_NS &&
+        (child.name.local === "t" || child.name.local === "delText")
+      ) {
+        for (const tc of child.children) {
+          if (tc.kind === "text") acc += tc.value;
+          else if (tc.kind === "cdata") acc += tc.value;
+        }
+      } else {
+        acc += visibleTextOfElement(child);
+      }
+    }
+  }
+  return acc;
 }
 
 /** Like {@link paragraphText} but for an entire document. */
 export function documentText(doc: WmlDocument, separator = "\n"): string {
   const parts: string[] = [];
   for (const block of doc.body.blocks) {
-    if (block.kind !== "paragraph") {
-      parts.push("");
-      continue;
-    }
-    parts.push(paragraphText(block));
+    parts.push(visibleTextOfBlock(block));
   }
   return parts.join(separator);
+}
+
+function visibleTextOfBlock(block: WmlBlock): string {
+  if (block.kind === "paragraph") return paragraphText(block);
+  if (block.kind === "table") {
+    const parts: string[] = [];
+    for (const row of block.rows) {
+      for (const cell of row.cells) {
+        for (const p of cell.paragraphs) parts.push(paragraphText(p));
+      }
+    }
+    return parts.join("\n");
+  }
+  return visibleTextOfElement(block.node);
 }

@@ -39,6 +39,16 @@ export {
   writeCommentsPart,
 } from "./comments.js";
 export {
+  type BuildFootnoteOptions,
+  buildFootnote,
+  buildFootnoteReferenceRun,
+  parseFootnotesPart,
+  SEED_ENDNOTES_XML,
+  SEED_FOOTNOTES_XML,
+  type WmlFootnotesPart,
+  writeFootnotesPart,
+} from "./footnotes.js";
+export {
   abstractNumId,
   numAbstractRef,
   numId,

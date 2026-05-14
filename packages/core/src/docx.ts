@@ -16,6 +16,8 @@ import {
   buildCommentRangeEnd,
   buildCommentRangeStart,
   buildCommentReferenceRun,
+  buildFootnote,
+  buildFootnoteReferenceRun,
   buildFooterXml,
   buildHeaderXml,
   buildHyperlink,
@@ -33,6 +35,11 @@ import {
   EMPTY_COMMENTS_XML,
   EMPTY_NUMBERING_XML,
   extensionForImageContentType,
+  parseFootnotesPart,
+  SEED_ENDNOTES_XML,
+  SEED_FOOTNOTES_XML,
+  type WmlFootnotesPart,
+  writeFootnotesPart,
   findStyle,
   findText,
   type HeaderFooterType,
@@ -118,6 +125,8 @@ export interface AppendParagraphOptions {
 const STYLES_PART_NAME = "/word/styles.xml";
 const NUMBERING_PART_NAME = "/word/numbering.xml";
 const COMMENTS_PART_NAME = "/word/comments.xml";
+const FOOTNOTES_PART_NAME = "/word/footnotes.xml";
+const ENDNOTES_PART_NAME = "/word/endnotes.xml";
 
 const BULLET_ABSTRACT_NUM_ID = 9000;
 const DECIMAL_ABSTRACT_NUM_ID = 9001;
@@ -140,6 +149,10 @@ export class Docx {
   private numberingDirty = false;
   private commentsCache: WmlCommentsPart | undefined;
   private commentsDirty = false;
+  private footnotesCache: WmlFootnotesPart | undefined;
+  private footnotesDirty = false;
+  private endnotesCache: WmlFootnotesPart | undefined;
+  private endnotesDirty = false;
 
   private constructor(pkg: OpcPackage, doc: WmlDocument, partName: string) {
     this.pkg = pkg;
@@ -624,6 +637,112 @@ export class Docx {
     return Math.max(1, this.documentRelationships().all.length + 1);
   }
 
+  /** Parsed `word/footnotes.xml` AST, or `undefined` if absent. */
+  get footnotesPart(): WmlFootnotesPart | undefined {
+    if (this.footnotesCache) return this.footnotesCache;
+    const part = this.pkg.getPart(FOOTNOTES_PART_NAME);
+    if (!part) return undefined;
+    const xml = new TextDecoder("utf-8").decode(part.data);
+    this.footnotesCache = parseFootnotesPart(parseXml(xml));
+    return this.footnotesCache;
+  }
+
+  /** Parsed `word/endnotes.xml` AST, or `undefined` if absent. */
+  get endnotesPart(): WmlFootnotesPart | undefined {
+    if (this.endnotesCache) return this.endnotesCache;
+    const part = this.pkg.getPart(ENDNOTES_PART_NAME);
+    if (!part) return undefined;
+    const xml = new TextDecoder("utf-8").decode(part.data);
+    this.endnotesCache = parseFootnotesPart(parseXml(xml));
+    return this.endnotesCache;
+  }
+
+  /**
+   * Append a footnote with the given text. Creates `footnotes.xml` (with
+   * the standard separator/continuationSeparator entries) on first use,
+   * registers the relationship from `word/document.xml`, and inserts a
+   * `<w:footnoteReference>` run at the end of the target paragraph.
+   *
+   * Returns the assigned footnote id (>=1).
+   */
+  addFootnote(paragraph: WmlParagraph, text: string): number {
+    return this.addNoteImpl(paragraph, text, "footnote");
+  }
+
+  /** Same shape as {@link addFootnote} but for endnotes. */
+  addEndnote(paragraph: WmlParagraph, text: string): number {
+    return this.addNoteImpl(paragraph, text, "endnote");
+  }
+
+  private addNoteImpl(paragraph: WmlParagraph, text: string, kind: "footnote" | "endnote"): number {
+    const part = kind === "footnote" ? this.ensureFootnotesPart() : this.ensureEndnotesPart();
+    const usedIds = new Set<number>();
+    for (const f of part.footnotes) {
+      const id = f.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "id")?.value;
+      if (id !== undefined) {
+        const n = Number.parseInt(id, 10);
+        if (Number.isFinite(n)) usedIds.add(n);
+      }
+    }
+    let nextId = 1;
+    while (usedIds.has(nextId)) nextId++;
+    const note = buildFootnote({ id: nextId, text }, kind);
+    part.footnotes.push(note);
+    if (kind === "footnote") this.footnotesDirty = true;
+    else this.endnotesDirty = true;
+
+    // Insert a reference run at the end of the paragraph.
+    paragraph.children.push({
+      kind: "raw",
+      node: buildFootnoteReferenceRun(
+        nextId,
+        kind === "footnote" ? "footnoteReference" : "endnoteReference",
+      ),
+    });
+    this.dirty = true;
+    return nextId;
+  }
+
+  private ensureFootnotesPart(): WmlFootnotesPart {
+    const existing = this.footnotesPart;
+    if (existing) return existing;
+    this.pkg.addPart({
+      name: FOOTNOTES_PART_NAME,
+      contentType: WML_CONTENT_TYPES.footnotes,
+      data: new TextEncoder().encode(SEED_FOOTNOTES_XML),
+    });
+    const docRels = this.pkg.partRelationships(this.partName);
+    if (docRels.byType(WML_RELATIONSHIPS.footnotes).length === 0) {
+      docRels.add({ type: WML_RELATIONSHIPS.footnotes, target: "footnotes.xml" });
+    }
+    const xml = new TextDecoder("utf-8").decode(
+      this.pkg.getPart(FOOTNOTES_PART_NAME)?.data ?? new Uint8Array(),
+    );
+    this.footnotesCache = parseFootnotesPart(parseXml(xml));
+    this.footnotesDirty = true;
+    return this.footnotesCache;
+  }
+
+  private ensureEndnotesPart(): WmlFootnotesPart {
+    const existing = this.endnotesPart;
+    if (existing) return existing;
+    this.pkg.addPart({
+      name: ENDNOTES_PART_NAME,
+      contentType: WML_CONTENT_TYPES.endnotes,
+      data: new TextEncoder().encode(SEED_ENDNOTES_XML),
+    });
+    const docRels = this.pkg.partRelationships(this.partName);
+    if (docRels.byType(WML_RELATIONSHIPS.endnotes).length === 0) {
+      docRels.add({ type: WML_RELATIONSHIPS.endnotes, target: "endnotes.xml" });
+    }
+    const xml = new TextDecoder("utf-8").decode(
+      this.pkg.getPart(ENDNOTES_PART_NAME)?.data ?? new Uint8Array(),
+    );
+    this.endnotesCache = parseFootnotesPart(parseXml(xml));
+    this.endnotesDirty = true;
+    return this.endnotesCache;
+  }
+
   /** Parsed `word/comments.xml` AST, or `undefined` if absent. */
   get commentsPart(): WmlCommentsPart | undefined {
     if (this.commentsCache) return this.commentsCache;
@@ -837,7 +956,15 @@ export class Docx {
    * environment where `Blob` is a global (modern browsers and Node 18+).
    */
   toBlob(): Blob {
-    return new Blob([this.toUint8Array()], {
+    const bytes = this.toUint8Array();
+    // Slice into a fresh ArrayBuffer view to satisfy BlobPart's invariance
+    // over ArrayBuffer (the TS lib treats SharedArrayBuffer-backed views as
+    // incompatible).
+    const buf = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    ) as ArrayBuffer;
+    return new Blob([new Uint8Array(buf)], {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
   }
@@ -860,7 +987,27 @@ export class Docx {
       this.flushComments(this.commentsCache);
       this.commentsDirty = false;
     }
+    if (this.footnotesDirty && this.footnotesCache) {
+      this.flushNotes(this.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
+      this.footnotesDirty = false;
+    }
+    if (this.endnotesDirty && this.endnotesCache) {
+      this.flushNotes(this.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
+      this.endnotesDirty = false;
+    }
     return this.pkg.write();
+  }
+
+  private flushNotes(
+    part: WmlFootnotesPart,
+    partName: string,
+    rootLocal: "footnotes" | "endnotes",
+  ): void {
+    const xmlDoc = writeFootnotesPart(part, rootLocal);
+    const xmlText = serializeXml(xmlDoc);
+    const xmlPart = this.pkg.getPart(partName);
+    if (!xmlPart) return;
+    xmlPart.data = new TextEncoder().encode(xmlText);
   }
 
   private flushComments(part: WmlCommentsPart): void {

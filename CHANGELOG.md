@@ -30,7 +30,7 @@ this file is a hand-curated overview.
     narrowing (in place of `e instanceof XmlParseError`).
 
   A minimal `createDocx + appendParagraph + toUint8Array` slice bundles
-  to ~40 KB minified; the full surface is ~115 KB. CI enforces both the
+  to ~42 KB minified; the full surface is ~131 KB. CI enforces both the
   byte budget and that no feature-specific string literals from unused
   branches leak into the minimal bundle (see `scripts/check-tree-shake.mjs`).
 
@@ -127,8 +127,9 @@ this file is a hand-curated overview.
   endnotes, tables, images, hyperlinks, text boxes, UTF-8 BOM, lists)
   and the python-docx test corpus. The ISO/IEC 29500 Strict variant is
   explicitly out of scope today and remains pass-through only.
-- 311 tests, all running in vitest under Node ≥ 20; the public surface
+- 512 tests, all running in vitest under Node ≥ 20; the public surface
   also runs in modern browsers (no Node-only dependencies in the published
-  bundles).
+  bundles). The browser-preview tests run under happy-dom (jsdom's
+  cross-realm `Uint8Array` confused fflate's type guards).
 - CI gate runs typecheck, lint, format check, tests across Node 20/22/24,
   AND the tree-shake budget check.

@@ -18,7 +18,7 @@ Every operation is exposed as a **standalone function** that takes a
 class) returned by `createDocx`, `openDocx`, `fromBlob`, or `clone`.
 Standalone functions let a bundler tree-shake any operation you don't
 import — a minimal `createDocx + appendParagraph + toUint8Array` slice
-ships in ~40 KB minified versus ~115 KB for the full surface (verified
+ships in ~42 KB minified versus ~131 KB for the full surface (verified
 in CI).
 
 ## Install

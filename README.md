@@ -58,7 +58,7 @@ const out = toUint8Array(tpl);
 > **Why standalone functions instead of methods?** Each operation is its
 > own export, so a bundler can tree-shake any function you don't import.
 > A minimal `createDocx + appendParagraph + toUint8Array` slice bundles to
-> ~40 KB minified; the full surface is ~115 KB. CI enforces both numbers.
+> ~42 KB minified; the full surface is ~131 KB. CI enforces both numbers.
 
 See [`packages/core/README.md`](./packages/core/README.md) for the full API
 walkthrough (images, comments, footnotes, headers/footers, bookmarks,
@@ -136,7 +136,7 @@ pnpm typecheck         # tsc --noEmit across all packages
 pnpm lint              # oxlint
 pnpm format:check      # oxfmt --check
 pnpm test              # vitest run
-pnpm build             # tsup, all packages
+pnpm build             # tsdown (rolldown), all packages
 ```
 
 See [`.claude/skills/run-check-and-test/SKILL.md`](./.claude/skills/run-check-and-test/SKILL.md)

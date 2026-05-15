@@ -8,7 +8,8 @@ a template, and the design target is full coverage of the WordprocessingML spec.
 
 - **Distribution**: npm. ESM-only with bundled `.d.ts` types.
 - **Runtime targets**: modern browsers (no Node-only APIs in the published
-  bundle) and Node.js LTS (currently 20, 22, 24).
+  bundle) and Node.js LTS (currently 22 and 24 — Node 20 reached EOL
+  2026-04 and is no longer in the CI matrix).
 - **Repository layout**: pnpm monorepo under `packages/`. The user-facing entry
   point is `@word-kit/core`. Lower-level layers (OPC packaging, individual
   OOXML parts) live in their own packages and are only re-exported through

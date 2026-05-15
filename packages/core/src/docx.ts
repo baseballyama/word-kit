@@ -628,6 +628,51 @@ export function findStyleIdByName(doc: Docx, name: string): string | undefined {
 }
 
 /**
+ * Copy every `<w:style>` definition from `templateBytes` into `doc`.
+ * Existing styles in `doc` with the same `w:styleId` are kept (the
+ * template does NOT overwrite them); pass `overwrite: true` to flip
+ * that. The template's own body, header, footer, etc. are ignored —
+ * only `word/styles.xml` is consulted.
+ *
+ * Useful when you want to start from a fresh document but pick up the
+ * design system (custom paragraph / character / table styles) from a
+ * Word template that someone designed by hand.
+ *
+ * Returns the number of style definitions copied.
+ */
+export function mergeStylesFromTemplate(
+  doc: Docx,
+  templateBytes: Uint8Array,
+  options: { overwrite?: boolean } = {},
+): number {
+  const overwrite = options.overwrite ?? false;
+  const tpl = readOpcPackage(templateBytes);
+  const tplStylesPart = getPart(tpl, STYLES_PART_NAME);
+  if (!tplStylesPart) return 0;
+  const tplStylesXml = new TextDecoder("utf-8").decode(tplStylesPart.data);
+  const tplStyles = parseStylesPart(parseXml(tplStylesXml));
+
+  const targetPart = ensureStylesPart(doc);
+  let copied = 0;
+  for (const tplStyle of tplStyles.styles) {
+    const idAttr = tplStyle.attrs.find((a) => a.name.local === "styleId");
+    if (!idAttr) continue;
+    const id = idAttr.value;
+    const existing = findStyle(targetPart, id);
+    if (existing) {
+      if (!overwrite) continue;
+      const idx = targetPart.styles.indexOf(existing);
+      if (idx >= 0) targetPart.styles[idx] = tplStyle;
+    } else {
+      targetPart.styles.push(tplStyle);
+    }
+    copied++;
+  }
+  if (copied > 0) doc.stylesDirty = true;
+  return copied;
+}
+
+/**
  * Parsed `word/numbering.xml` AST, or `undefined` if absent. Lazy and
  * cached just like {@link stylesPart}.
  */

@@ -1,7 +1,22 @@
 # word-kit `.docx` browser preview — design plan
 
-> Status: **proposal**, not yet implemented. Decisions in the "Recommendation"
-> section need a sign-off before code starts. Last updated 2026-05-15.
+> **Status (2026-05-15 — final): SHIPPED at v0. v1 and v2 are not
+> planned.**
+>
+> The `@word-kit/preview` package now wraps `docx-preview` behind the
+> stable `previewToDOM(...)` function-API entry. That meets the user
+> requirement ("プレビューできれば OK") so the more ambitious v1/v2 phases
+> originally described below are explicitly dropped: implementing our
+> own renderer would re-do years of `docx-preview` work for purely
+> architectural-purity reasons that do not change what the user sees.
+>
+> The v1/v2 sections are kept below as a **historical record** of
+> options that were considered and rejected, so a future contributor
+> doesn't re-derive the same plan and walk down it. Re-open the
+> question only if a concrete `docx-preview` bug blocks a real user
+> workflow we cannot work around — at which point the right move is
+> usually upstreaming a fix to `docx-preview`, not forking the
+> renderer.
 
 ## 1. Why
 
@@ -96,7 +111,24 @@ Headline observations:
   `docx-preview` _behind a stable function-API entry point_, then
   swap the implementation later without breaking consumers.
 
-## 4. Recommendation: v0 bridge → v1 own → v2 layout engine
+## 4. Final decision (2026-05-15): stop at v0
+
+The wrap-`docx-preview` v0 ships the user-visible feature
+("プレビューできれば OK"). The originally-planned v1 (own renderer)
+and v2 (layout engine) phases are **dropped** — they would re-do work
+`docx-preview` already does for purely architectural-purity reasons
+that do not change what the user sees.
+
+If a concrete `docx-preview` bug blocks a real user workflow that
+can't be worked around, the right next move is **upstream a fix**,
+not re-implement. Re-opening v1/v2 requires that level of evidence.
+
+The v0 phase below is the actual shipped state. The v1/v2 sections
+are kept as a **historical record of considered-and-rejected
+options** so a future contributor doesn't re-derive the same plan
+and walk down it.
+
+## 4a. Original recommendation (HISTORICAL — superseded by §4)
 
 A three-phase rollout, each phase shipping a usable feature, with the
 public API stable across all three.

@@ -5,19 +5,17 @@ opened) by [`@word-kit/core`](../core).
 
 ## Status
 
-**v0 — bridge.** This release wraps the OSS
+**Stable.** Wraps the OSS
 [`docx-preview`](https://github.com/VolodymyrBaydalka/docxjs)
-(Apache-2.0) library behind `word-kit`'s function-API surface. It
-ships fast and renders most docx content correctly today.
+(Apache-2.0) renderer behind `word-kit`'s function-API surface. The
+wrap is intentional and final — see
+[`docs/PLAN-PREVIEW.md`](../../docs/PLAN-PREVIEW.md) for why we are
+not re-implementing the renderer in-house.
 
-A v1 release will replace the underlying renderer with a native
-walker driven directly by `@word-kit/core`'s WML AST — no second
-OOXML parse, full control over the long-tail fidelity gaps that
-upstream `docx-preview` has acknowledged. **The public API
-(`previewToDOM`) will not change across the swap.**
-
-See [`docs/PLAN-PREVIEW.md`](../../docs/PLAN-PREVIEW.md) at the
-monorepo root for the full design.
+If you hit a fidelity bug, please file it against
+[`docx-preview`](https://github.com/VolodymyrBaydalka/docxjs/issues)
+upstream first; we follow that project's releases and bump the
+peer-dep promptly.
 
 ## Install
 

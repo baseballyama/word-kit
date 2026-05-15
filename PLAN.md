@@ -116,7 +116,7 @@
 | -------------- | ---------------------------------------------------------------------------- | ------------------------------------------- |
 | 言語           | TypeScript (strict)                                                          | 型で OOXML スキーマを表現する旨味が大きい   |
 | パッケージ管理 | pnpm workspaces                                                              | monorepo 性能と決定的解決 (既存 scaffold)   |
-| ビルド         | tsup (esbuild ラップ)                                                        | ESM-only, dts 同梱, 速い (既存 scaffold)    |
+| ビルド         | tsdown (rolldown ベース)                                                     | ESM-only, dts 同梱, 高速 (rolldown / Oxc)   |
 | テスト         | vitest                                                                       | ESM ネイティブ, in-browser テスト可         |
 | Lint/Format    | oxlint + oxfmt (既存 scaffold)                                               | 高速、設定軽量                              |
 | バージョニング | changesets (既存 scaffold)                                                   | monorepo の semver と changelog 自動化      |
@@ -597,7 +597,7 @@ const xml = doc.parts.get("/word/document.xml")!.xml; // Raw XML AST
 ### M0 (完了): リポジトリスケルトン
 
 - README / CLAUDE.md / PLAN.md / references/ submodules / docs/specs/ / scripts/fetch-specs.sh
-- pnpm workspace / changesets / oxlint / oxfmt / tsup / vitest の scaffold は既存
+- pnpm workspace / changesets / oxlint / oxfmt / tsdown / vitest の scaffold は既存
 
 ### M1: OPC 読み書き + 完全 round-trip
 

@@ -39,8 +39,9 @@ a template, and the design target is full coverage of the WordprocessingML spec.
 
 - **TypeScript** with `strict` and `noUncheckedIndexedAccess`. Public API
   exports named types alongside values.
-- **Build**: `tsup` for library bundling (ESM only); `tsc --noEmit` for type
-  checking. Source under `packages/*/src`, build output under `packages/*/dist`.
+- **Build**: `tsdown` (rolldown-based) for library bundling (ESM only);
+  `tsc --noEmit` for type checking. Source under `packages/*/src`, build
+  output under `packages/*/dist` (`.mjs` / `.d.mts`).
 - **Tests**: `vitest` for unit and integration. Round-trip tests (build →
   serialize → reparse, or compare against golden XML fixtures) are the
   highest-signal tests in this project — when adding a new OOXML element, add

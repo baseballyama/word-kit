@@ -1,34 +1,77 @@
-// Smoke tests for the v0 preview bridge.
+// @vitest-environment happy-dom
 //
-// We deliberately do NOT exercise `previewToDOM` end-to-end against a
-// real `Docx` here. vitest's module resolver routes `fflate` (a
-// transitive dep of `@word-kit/core`'s OPC layer) to the browser
-// bundle even in the node-pool worker, and the browser bundle
-// produces zip output that JSZip 3.x — which docx-preview vendors —
-// then mis-decodes. The mismatch is purely a vitest harness issue;
-// real browsers and real Node both produce valid docx via the same
-// code path (verified by `pnpm sample`).
-//
-// Future work (tracked in docs/PLAN-PREVIEW.md):
-//   - Add a Playwright suite that invokes `previewToDOM` in an
-//     actual browser, where neither bundler nor JSZip mismatch
-//     applies.
-//   - Add a Node-environment integration test once we fence
-//     `fflate` to its node entry inside vitest.
+// happy-dom (rather than jsdom) is the test DOM here because jsdom's
+// global `TextEncoder` returns a `Uint8Array` from a different realm
+// than the test's, so `instanceof Uint8Array` fails inside fflate's
+// internal type guards and the produced zip is malformed (path/0/,
+// path/1/ … directory-marker entries instead of the requested file).
+// happy-dom shares the global Uint8Array with the test realm, so
+// fflate produces correct output and docx-preview can parse it.
 
+import { appendParagraph, createDocx, toUint8Array, type Docx } from "@word-kit/core";
 import { describe, expect, it } from "vitest";
 import { previewToDOM } from "./index.js";
 
-describe("@word-kit/preview surface", () => {
-  it("exports `previewToDOM` as a function", () => {
-    expect(typeof previewToDOM).toBe("function");
+function freshDoc(text: string): Docx {
+  const doc = createDocx({ paragraphs: [] });
+  appendParagraph(doc, text);
+  return doc;
+}
+
+describe("previewToDOM (v0 bridge over docx-preview)", () => {
+  it("renders a fresh Docx into the supplied container", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const handle = await previewToDOM(freshDoc("Hello, preview!"), container);
+    expect(container.textContent).toContain("Hello, preview!");
+    handle.dispose();
+    container.remove();
   });
 
-  it("`previewToDOM` accepts the documented signature shape", () => {
-    // Pure type-shape check — call signature is `(source, container,
-    // options?) => Promise<Handle>`. We can't invoke without a DOM,
-    // but we can confirm the function's `.length` matches the
-    // documented arity (2 required params).
-    expect(previewToDOM.length).toBe(2);
+  it("accepts raw bytes (Uint8Array) as well as a Docx value", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const bytes = toUint8Array(freshDoc("From bytes"));
+    const handle = await previewToDOM(bytes, container);
+    expect(container.textContent).toContain("From bytes");
+    handle.dispose();
+    container.remove();
+  });
+
+  it("dispose() removes the rendered DOM and is idempotent", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const handle = await previewToDOM(freshDoc("disposable"), container);
+    expect(container.querySelector("[data-word-kit-preview]")).not.toBeNull();
+    handle.dispose();
+    expect(container.querySelector("[data-word-kit-preview]")).toBeNull();
+    expect(() => handle.dispose()).not.toThrow();
+    container.remove();
+  });
+
+  it("two simultaneous previews on the same container coexist", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const a = await previewToDOM(freshDoc("aaaaa"), container);
+    const b = await previewToDOM(freshDoc("bbbbb"), container);
+    expect(container.textContent).toContain("aaaaa");
+    expect(container.textContent).toContain("bbbbb");
+    expect(container.querySelectorAll("[data-word-kit-preview]")).toHaveLength(2);
+    a.dispose();
+    b.dispose();
+    expect(container.querySelectorAll("[data-word-kit-preview]")).toHaveLength(0);
+    container.remove();
+  });
+
+  it("custom classPrefix is honoured by the underlying renderer", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const handle = await previewToDOM(freshDoc("prefixed"), container, {
+      classPrefix: "custom-",
+    });
+    const classed = container.querySelectorAll('[class*="custom-"]');
+    expect(classed.length).toBeGreaterThan(0);
+    handle.dispose();
+    container.remove();
   });
 });

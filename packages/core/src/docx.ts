@@ -739,7 +739,15 @@ export function addTable(
   return table;
 }
 
-/** Search the document body for all matches of `query`. */
+/**
+ * Search the document body for all matches of `query`.
+ *
+ * **Match semantics:** matches every occurrence regardless of the
+ * regex `g` flag — i.e. the result is what you'd get from "Find All"
+ * in Word's UI rather than `String.prototype.match` without `/g`.
+ * String queries are treated as plain substrings (no regex
+ * interpretation, case-sensitive).
+ */
 export function findText(doc: Docx, query: string | RegExp): TextMatch[] {
   return wmlFindText(doc.document, query);
 }
@@ -823,6 +831,12 @@ export function findTextEverywhere(
  * Replace every occurrence of `query`. Returns the number of replacements
  * performed. Marks the document as dirty so the next `toUint8Array()`
  * re-serializes the body.
+ *
+ * **Match semantics:** matches every occurrence regardless of the
+ * regex `g` flag — equivalent to Word's "Replace All". String queries
+ * are matched literally (no regex interpretation). The replacement is
+ * applied in a single pass, so a `replacement` callback that returns
+ * a string containing the original pattern does NOT loop.
  */
 export function replaceText(
   doc: Docx,

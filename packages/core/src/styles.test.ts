@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { findStyle, isDefaultStyle, styleBasedOn, styleId, styleType } from "@word-kit/wml";
 import { describe, expect, it } from "vitest";
@@ -55,10 +55,16 @@ describe("Docx styles", () => {
     expect(all).toHaveLength(1);
   });
 
-  it("opens a real Word docx and reads its style list", () => {
-    const bytes = readFileSync(
-      resolve(REPO_ROOT, "references/mammoth.js/test/test-data/single-paragraph.docx"),
+  it("opens a real Word docx and reads its style list", (ctx) => {
+    const fixture = resolve(
+      REPO_ROOT,
+      "references/mammoth.js/test/test-data/single-paragraph.docx",
     );
+    if (!existsSync(fixture)) {
+      ctx.skip();
+      return;
+    }
+    const bytes = readFileSync(fixture);
     const doc = openDocx(bytes);
     const part = stylesPart(doc);
     expect(part).toBeDefined();

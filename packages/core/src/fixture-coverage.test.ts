@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { openDocx, paragraphs, text, toUint8Array } from "./docx.js";
@@ -11,6 +11,13 @@ const FIXTURE_DIR = resolve(REPO_ROOT, "references/mammoth.js/test/test-data");
 const SKIP = new Set(["strict-format.docx"]);
 
 describe("mammoth.js fixture corpus: open + round-trip parity", () => {
+  if (!existsSync(FIXTURE_DIR)) {
+    it.skip("references/mammoth.js submodule not initialised — run `git submodule update --init --recursive`", () => {
+      // intentionally empty
+    });
+    return;
+  }
+
   const all = readdirSync(FIXTURE_DIR)
     .filter((n) => n.endsWith(".docx"))
     .filter((n) => !SKIP.has(n));

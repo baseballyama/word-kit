@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { openDocx, paragraphs, replaceText, tables, text, toUint8Array } from "./docx.js";
@@ -11,6 +11,13 @@ function loadFixture(name: string): Uint8Array {
 }
 
 describe("real-world docx fixtures (mammoth.js test-data)", () => {
+  if (!existsSync(FIXTURE_DIR)) {
+    it.skip("references/mammoth.js submodule not initialised — run `git submodule update --init --recursive`", () => {
+      // intentionally empty
+    });
+    return;
+  }
+
   it("opens single-paragraph.docx and reads its visible text", () => {
     const doc = openDocx(loadFixture("single-paragraph.docx"));
     expect(paragraphs(doc).length).toBeGreaterThan(0);

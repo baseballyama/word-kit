@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { images, openDocx, paragraphs, text, toUint8Array } from "./docx.js";
@@ -7,6 +7,13 @@ const REPO_ROOT = resolve(import.meta.dirname, "../../..");
 const FIXTURE_DIR = resolve(REPO_ROOT, "references/python-docx/tests/test_files");
 
 describe("python-docx fixture corpus: open + round-trip parity", () => {
+  if (!existsSync(FIXTURE_DIR)) {
+    it.skip("references/python-docx submodule not initialised — run `git submodule update --init --recursive`", () => {
+      // intentionally empty
+    });
+    return;
+  }
+
   const all = readdirSync(FIXTURE_DIR).filter((n) => n.endsWith(".docx"));
 
   for (const name of all) {

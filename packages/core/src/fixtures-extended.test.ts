@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -21,6 +21,13 @@ function load(name: string): Uint8Array {
 }
 
 describe("real fixtures: extended coverage", () => {
+  if (!existsSync(FIXTURE_DIR)) {
+    it.skip("references/mammoth.js submodule not initialised — run `git submodule update --init --recursive`", () => {
+      // intentionally empty
+    });
+    return;
+  }
+
   it("opens comments.docx, validates, and reads the comments part", () => {
     const doc = openDocx(load("comments.docx"));
     const cp = commentsPart(doc);

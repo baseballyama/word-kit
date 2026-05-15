@@ -68,7 +68,7 @@ import {
   setTableRowHeight,
   tables,
   toUint8Array,
-} from "../packages/core/dist/index.js";
+} from "../packages/core/dist/index.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");

@@ -55,6 +55,7 @@ import {
   buildPPrWithNumPr,
   type BuildStyleOptions,
   buildStyle,
+  buildTextRun,
   buildTextTable,
   type BuildTableOptions,
   bulletAbstractNumLevels,
@@ -689,12 +690,7 @@ export function applyListToParagraph(
 }
 
 function appendListParagraph(doc: Docx, text: string, numIdValue: number): WmlParagraph {
-  const piece: WmlRunPiece = {
-    kind: "text",
-    value: text,
-    preserveSpace: /^\s|\s$/.test(text),
-  };
-  const run: WmlRun = { kind: "run", pieces: [piece], extras: [] };
+  const run = buildTextRun(text);
   const paragraph: WmlParagraph = {
     kind: "paragraph",
     pPr: buildPPrWithNumPr(numIdValue, 0),
@@ -1844,34 +1840,22 @@ export function appendParagraph(
   text: string,
   options: AppendParagraphOptions = {},
 ): WmlParagraph {
-  const piece: WmlRunPiece = {
-    kind: "text",
-    value: text,
-    preserveSpace: /^\s|\s$/.test(text),
-  };
-  const run: WmlRun =
-    options.bold || options.italic
-      ? {
-          kind: "run",
-          rPr: {
-            kind: "element",
-            name: { uri: WML_NS, local: "rPr", prefix: "w" },
-            attrs: [],
-            children: [
-              ...(options.bold ? [wmlEmptyEl("b")] : []),
-              ...(options.italic ? [wmlEmptyEl("i")] : []),
-            ],
-            xmlSpace: "default",
-            selfClosing: false,
-          },
-          pieces: [piece],
-          extras: [],
-        }
-      : {
-          kind: "run",
-          pieces: [piece],
-          extras: [],
-        };
+  // Defer segmentation (\t → <w:tab/>, \n → <w:br/>) to buildTextRun so
+  // every text-producing helper goes through the same path.
+  const run = buildTextRun(text);
+  if (options.bold || options.italic) {
+    run.rPr = {
+      kind: "element",
+      name: { uri: WML_NS, local: "rPr", prefix: "w" },
+      attrs: [],
+      children: [
+        ...(options.bold ? [wmlEmptyEl("b")] : []),
+        ...(options.italic ? [wmlEmptyEl("i")] : []),
+      ],
+      xmlSpace: "default",
+      selfClosing: false,
+    };
+  }
   const paragraph: WmlParagraph = options.style
     ? {
         kind: "paragraph",

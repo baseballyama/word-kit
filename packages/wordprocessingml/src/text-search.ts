@@ -224,7 +224,9 @@ function getTextPiece(p: WmlParagraph, ref: TextRef): (WmlRunPiece & { kind: "te
  * Includes text inside structured runs (`<w:t>`), nested hyperlinks
  * (`<w:hyperlink>...<w:r><w:t>...`), structured-document tags
  * (`<w:sdt>`), tracked-change insertions (`<w:ins>`) and deletions
- * (`<w:del>`). Drawing/picture/break/tab content is ignored.
+ * (`<w:del>`). `<w:tab/>` becomes `\t` and `<w:br/>` becomes `\n` so
+ * the result round-trips with `appendParagraph` / `appendTextRun`.
+ * Drawing / picture / page-break content is still ignored.
  */
 export function paragraphText(p: WmlParagraph): string {
   let acc = "";
@@ -239,6 +241,8 @@ function visibleTextOfInline(inline: WmlInline): string {
     let acc = "";
     for (const piece of inline.pieces) {
       if (piece.kind === "text" || piece.kind === "delText") acc += piece.value;
+      else if (piece.kind === "tab") acc += "\t";
+      else if (piece.kind === "break" && piece.breakType !== "page") acc += "\n";
     }
     return acc;
   }
@@ -257,6 +261,11 @@ function visibleTextOfElement(el: XmlElement): string {
           if (tc.kind === "text") acc += tc.value;
           else if (tc.kind === "cdata") acc += tc.value;
         }
+      } else if (child.name.uri === WML_NS && child.name.local === "tab") {
+        acc += "\t";
+      } else if (child.name.uri === WML_NS && child.name.local === "br") {
+        const typeAttr = child.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "type");
+        if (typeAttr?.value !== "page") acc += "\n";
       } else {
         acc += visibleTextOfElement(child);
       }

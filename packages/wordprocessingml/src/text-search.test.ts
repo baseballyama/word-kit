@@ -26,9 +26,16 @@ describe("text-search: paragraphText / documentText", () => {
     expect(documentText(d)).toBe("{{name}}");
   });
 
-  it("ignores tab and break pieces in the flat text", () => {
+  it("emits \\t for <w:tab/> and \\n for <w:br/> in the flat text", () => {
+    // This is the inverse of the splitter inside buildTextRun, so callers
+    // can round-trip a string through appendParagraph + paragraphText.
     const d = doc("<w:p><w:r><w:t>A</w:t><w:tab/><w:t>B</w:t><w:br/><w:t>C</w:t></w:r></w:p>");
-    expect(paragraphText(d.body.blocks[0] as never)).toBe("ABC");
+    expect(paragraphText(d.body.blocks[0] as never)).toBe("A\tB\nC");
+  });
+
+  it('page-break <w:br w:type="page"/> is excluded from flat text', () => {
+    const d = doc('<w:p><w:r><w:t>A</w:t><w:br w:type="page"/><w:t>B</w:t></w:r></w:p>');
+    expect(paragraphText(d.body.blocks[0] as never)).toBe("AB");
   });
 });
 

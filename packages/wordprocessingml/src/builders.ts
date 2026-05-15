@@ -13,14 +13,50 @@ import type {
  * Construct a `<w:t>`-bearing run containing the given plain text.
  * `xml:space="preserve"` is applied automatically when the text has
  * leading or trailing whitespace.
+ *
+ * Tab characters (`\t`) and newlines (`\n`, `\r\n`) in the input are
+ * segmented into `<w:tab/>` and `<w:br/>` elements respectively, so
+ * the visible rendering in Word matches what the caller wrote.
  */
 export function buildTextRun(text: string): WmlRun {
-  const piece: WmlRunPiece = {
-    kind: "text",
-    value: text,
-    preserveSpace: /^\s|\s$/.test(text),
+  return { kind: "run", pieces: splitTextIntoPieces(text), extras: [] };
+}
+
+/**
+ * Split a plain string into a sequence of WmlRunPiece values, replacing
+ * `\t` with a tab piece and `\n` (or `\r\n`) with a break piece. Empty
+ * input produces a single empty text piece so downstream serializers
+ * always emit something for the run.
+ */
+function splitTextIntoPieces(text: string): WmlRunPiece[] {
+  if (text === "") {
+    return [{ kind: "text", value: "", preserveSpace: false }];
+  }
+  const pieces: WmlRunPiece[] = [];
+  let buffer = "";
+  const flush = (): void => {
+    if (buffer.length === 0) return;
+    pieces.push({ kind: "text", value: buffer, preserveSpace: /^\s|\s$/.test(buffer) });
+    buffer = "";
   };
-  return { kind: "run", pieces: [piece], extras: [] };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "\t") {
+      flush();
+      pieces.push({ kind: "tab" });
+    } else if (ch === "\r" && text[i + 1] === "\n") {
+      flush();
+      pieces.push({ kind: "break" });
+      i++; // consume the \n half of \r\n
+    } else if (ch === "\n" || ch === "\r") {
+      flush();
+      pieces.push({ kind: "break" });
+    } else {
+      buffer += ch;
+    }
+  }
+  flush();
+  return pieces;
 }
 
 /** Construct a paragraph with a single text run. */
@@ -385,11 +421,7 @@ export function appendTextRun(
   text: string,
   formatting: RunFormatting = {},
 ): WmlRun {
-  const piece: WmlRunPiece = {
-    kind: "text",
-    value: text,
-    preserveSpace: /^\s|\s$/.test(text),
-  };
+  const pieces = splitTextIntoPieces(text);
   const rPrChildren: XmlElement[] = [];
   if (formatting.font || formatting.fontEastAsia) {
     const attrs: XmlAttr[] = [];
@@ -422,10 +454,10 @@ export function appendTextRun(
           xmlSpace: "default",
           selfClosing: false,
         },
-        pieces: [piece],
+        pieces,
         extras: [],
       }
-    : { kind: "run", pieces: [piece], extras: [] };
+    : { kind: "run", pieces, extras: [] };
   paragraph.children.push(run);
   return run;
 }

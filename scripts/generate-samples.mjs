@@ -386,7 +386,7 @@ async function emitPair(name, buildTemplate, fillTemplate) {
 }
 
 await emitPair(
-  "20-template-text-replace",
+  "20-mailmerge-text-replace",
   (tpl) => {
     addChecklist(tpl, [
       "Both files (template and filled) open without 'needs repair' prompt.",
@@ -412,7 +412,7 @@ await emitPair(
 );
 
 await emitPair(
-  "21-template-cross-part",
+  "21-mailmerge-cross-part",
   (tpl) => {
     addChecklist(tpl, [
       "Header reads '{{company}} — Confidential' in the template, '{{company}}' is replaced by 'Acme Inc.' in the filled version.",
@@ -441,11 +441,11 @@ await emitPair(
 );
 
 await emitPair(
-  "22-template-mail-merge-fanout",
+  "22-mailmerge-fanout",
   (tpl) => {
     addChecklist(tpl, [
       "The template by itself shows '{{name}}', '{{order}}', '{{total}}' literally.",
-      "The 'filled' file is one of three customers (Alice). Compare against 22-template-mail-merge-fanout-filled-bob.docx and -charlie.docx in the same folder — each is a deep clone of the same template with different values.",
+      "The 'filled' file is one of three customers (Alice). Compare against 22-mailmerge-fanout-filled-bob.docx and -charlie.docx in the same folder — each is a deep clone of the same template with different values.",
       "Each clone has its own coreProperties title — File ▸ Info shows different names.",
       "Bullet list 'items' in the template is replaced by per-customer items in the filled output.",
     ]);
@@ -498,7 +498,7 @@ await emitPair(
       // are limited to the body text we keep static.
       apply(copy, c);
       writeFile(
-        join(OUT_DIR, `22-template-mail-merge-fanout-filled-${c.name.toLowerCase()}.docx`),
+        join(OUT_DIR, `22-mailmerge-fanout-filled-${c.name.toLowerCase()}.docx`),
         toUint8Array(copy),
       );
     }
@@ -506,7 +506,7 @@ await emitPair(
 );
 
 await emitPair(
-  "23-template-image-replace",
+  "23-mailmerge-image-replace",
   (tpl) => {
     addChecklist(tpl, [
       "Template shows a tiny 1×1 image with alt text 'placeholder'.",
@@ -535,7 +535,7 @@ await emitPair(
 );
 
 await emitPair(
-  "24-template-hyperlink-rewrite",
+  "24-mailmerge-hyperlink-rewrite",
   (tpl) => {
     addChecklist(tpl, [
       "Template contains two clickable links to 'https://stage.example.com/...'",
@@ -557,7 +557,7 @@ await emitPair(
 );
 
 await emitPair(
-  "25-template-cleanup-after-fill",
+  "25-mailmerge-cleanup-after-fill",
   (tpl) => {
     addChecklist(tpl, [
       "Template carries one comment ('Reviewer: please update') and a {{name}} placeholder.",
@@ -578,7 +578,7 @@ await emitPair(
   },
 );
 
-await emit("26-template-audit", (doc) => {
+await emit("26-mailmerge-audit", (doc) => {
   // Self-contained: build a docx with placeholders and links, then dump
   // an audit report into the same docx.
   addChecklist(doc, [
@@ -604,6 +604,161 @@ await emit("26-template-audit", (doc) => {
   for (const h of externalHyperlinks(doc)) appendParagraph(doc, `  • ${h.relId} → ${h.target}`);
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// Word-style template samples ("template = pre-styled base", *not*
+// `{{placeholder}}` substitution). Mirrors the PowerPoint workflow:
+// the template defines page setup, custom styles, header/footer, and a
+// title page. The "filled" sample loads it and *adds* content using the
+// template's pre-defined styles — the design carries over automatically
+// because Word resolves <w:pStyle w:val="MyStyle"/> against the template's
+// styles.xml at render time.
+//
+// Distinct from the 20-25 mail-merge samples above, which use
+// `replaceText` to swap `{{placeholder}}` tokens.
+// ─────────────────────────────────────────────────────────────────────────
+
+await emitPair(
+  "30-styled-base",
+  (tpl) => {
+    addChecklist(tpl, [
+      "Open the template alone: page is A4 portrait with header 'Acme Reports' and a page-number footer; styles pane lists 'AcmeTitle', 'AcmeSubtitle', 'AcmeBody', 'AcmeCallout'.",
+      "Open 30-styled-base-filled.docx alongside: it inherits the same header / footer / page setup AND uses those styles for its content (title is bold dark-blue 22pt, callouts have a yellow background).",
+      "Nothing in the filled doc had to redefine the styles — they came from the template's styles.xml automatically.",
+    ]);
+    addHeader(tpl, "Acme Reports");
+    addPageNumberFooter(tpl, "Page ", "");
+    addStyle(tpl, {
+      type: "paragraph",
+      styleId: "AcmeTitle",
+      name: "Acme Title",
+      basedOn: "Normal",
+      qFormat: true,
+      bold: true,
+      fontSizeHalfPoints: 44,
+      color: "1F497D",
+    });
+    addStyle(tpl, {
+      type: "paragraph",
+      styleId: "AcmeSubtitle",
+      name: "Acme Subtitle",
+      basedOn: "Normal",
+      qFormat: true,
+      italic: true,
+      fontSizeHalfPoints: 28,
+      color: "4F81BD",
+    });
+    addStyle(tpl, {
+      type: "paragraph",
+      styleId: "AcmeBody",
+      name: "Acme Body",
+      basedOn: "Normal",
+      qFormat: true,
+      fontSizeHalfPoints: 22,
+    });
+    addStyle(tpl, {
+      type: "paragraph",
+      styleId: "AcmeCallout",
+      name: "Acme Callout",
+      basedOn: "Normal",
+      qFormat: true,
+      bold: true,
+      color: "C00000",
+      fontSizeHalfPoints: 24,
+    });
+    appendParagraph(tpl, "Acme Reports — Template", { style: "AcmeTitle" });
+    appendParagraph(tpl, "(use this file as a base, then add content with the styles above)", {
+      style: "AcmeSubtitle",
+    });
+  },
+  (filled) => {
+    // The "filled" doc just consumes the template's styles. No
+    // re-definition, no `{{placeholder}}` text — this is the
+    // PowerPoint-style "open the template, build content on top".
+    appendParagraph(filled, "Quarterly Status — Q3 2026", { style: "AcmeTitle" });
+    appendParagraph(filled, "Internal — Engineering", { style: "AcmeSubtitle" });
+    appendParagraph(filled, "Highlights", { style: "AcmeCallout" });
+    appendParagraph(
+      filled,
+      "Shipped v2.0 with run-spanning find/replace and tree-shake-friendly function API.",
+      { style: "AcmeBody" },
+    );
+    appendParagraph(filled, "Adopted by three internal teams; external beta opens next sprint.", {
+      style: "AcmeBody",
+    });
+    appendParagraph(filled, "Next steps", { style: "AcmeCallout" });
+    appendParagraph(filled, "Real-Word verification across Mac / Windows / Web.", {
+      style: "AcmeBody",
+    });
+    appendParagraph(filled, "1.0 release after dogfood.", { style: "AcmeBody" });
+  },
+);
+
+await emitPair(
+  "31-styled-base-with-cover",
+  (tpl) => {
+    addChecklist(tpl, [
+      "Template includes a cover page (centred title + subtitle + a hard page break) — the layout is meant to be reused as-is.",
+      "Open 31-styled-base-with-cover-filled.docx: the cover page is preserved, and the body that comes after it carries the new content authored against the template's styles.",
+      "The filled doc never touches the cover — it only appends after the page break, which is what real reporting pipelines do.",
+    ]);
+    addHeader(tpl, "Acme Reports — Cover Template");
+    addPageNumberFooter(tpl, "Page ", "");
+    addStyle(tpl, {
+      type: "paragraph",
+      styleId: "CoverTitle",
+      name: "Cover Title",
+      qFormat: true,
+      bold: true,
+      fontSizeHalfPoints: 60,
+      color: "1F497D",
+    });
+    addStyle(tpl, {
+      type: "paragraph",
+      styleId: "CoverSubtitle",
+      name: "Cover Subtitle",
+      qFormat: true,
+      italic: true,
+      fontSizeHalfPoints: 32,
+      color: "808080",
+    });
+    addStyle(tpl, {
+      type: "paragraph",
+      styleId: "BodyHeading",
+      name: "Body Heading",
+      basedOn: "Normal",
+      qFormat: true,
+      bold: true,
+      fontSizeHalfPoints: 32,
+      color: "1F497D",
+    });
+    // Cover page.
+    appendParagraph(tpl, "Acme Reports", { style: "CoverTitle" });
+    setParagraphAlignment(paragraphs(tpl).at(-1), "center");
+    appendParagraph(tpl, "(report title goes here)", { style: "CoverSubtitle" });
+    setParagraphAlignment(paragraphs(tpl).at(-1), "center");
+    appendPageBreak(tpl);
+  },
+  (filled) => {
+    // The cover above is preserved verbatim — we just append content
+    // after the existing page break.
+    appendParagraph(filled, "Executive Summary", { style: "BodyHeading" });
+    appendParagraph(
+      filled,
+      "Q3 saw word-kit reach feature parity with python-docx for the docx editing surface most teams need: paragraphs, tables, styles, headers/footers, comments, footnotes, hyperlinks, and tracked changes.",
+    );
+    appendParagraph(filled, "Adoption", { style: "BodyHeading" });
+    addBulletList(filled, [
+      "Three internal teams onboarded.",
+      "External beta opens next sprint.",
+      "1.0 release blocked only on real-Word verification (Mac, Windows, Web).",
+    ]);
+  },
+);
+
 console.log(`\nAll samples written to ${OUT_DIR}.`);
 console.log("Open each one in Microsoft Word and walk the checklist at the top.");
-console.log("Pairs (NN-template + NN-filled) demonstrate the open → edit → save lifecycle.");
+console.log("01-13: feature smoke tests, built from scratch.");
+console.log("20-26 (mailmerge-*): {{placeholder}}-substitution workflow (mail-merge style).");
+console.log(
+  "30-31 (styled-base-*): pre-styled template base + content authored on top (PowerPoint-style).",
+);

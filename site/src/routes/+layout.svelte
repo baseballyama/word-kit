@@ -29,7 +29,7 @@
       </div>
       <div class="cell">
         <span class="label">Runtime</span>
-        <span>Node 20+ · browsers</span>
+        <span>Node 22+ · browsers</span>
       </div>
       <div class="cell">
         <span class="label">Sibling</span>

@@ -12,7 +12,7 @@ export const prerender = true;
 
 const BODY = `# word-kit
 
-> OOXML-compliant (ECMA-376) Word \`.docx\` library. Reads, edits, and writes WordprocessingML in both Node 20+ and modern browsers. Lossless round-trip for every element the library doesn't yet model (so hand-designed templates survive intact). Function-first API: every operation is a standalone, tree-shakeable export. Optional companion \`@word-kit/preview\` mounts a read-only render of any \`Docx\` into a DOM container.
+> OOXML-compliant (ECMA-376) Word \`.docx\` library. Reads, edits, and writes WordprocessingML in both Node 22+ and modern browsers. Lossless round-trip for every element the library doesn't yet model (so hand-designed templates survive intact). Function-first API: every operation is a standalone, tree-shakeable export. Optional companion \`@word-kit/preview\` mounts a read-only render of any \`Docx\` into a DOM container.
 
 ## Packages
 
@@ -36,7 +36,7 @@ Out of scope (permanent): rendering to PDF, headless Word automation, binary \`.
 
 ## Status
 
-Pre-1.0. Core (\`openDocx\` / \`createDocx\` / \`toUint8Array\`) is stable and lossless-round-trip-verified against the mammoth.js and python-docx fixture corpora. The 512-test suite runs in Node 20 / 22 / 24 on every change; tree-shake budget gate prevents accidental bundle bloat.
+Pre-1.0. Core (\`openDocx\` / \`createDocx\` / \`toUint8Array\`) is stable and lossless-round-trip-verified against the mammoth.js and python-docx fixture corpora. The 512-test suite runs on Node 22 and 24 on every change; tree-shake budget gate prevents accidental bundle bloat.
 
 ## Source
 

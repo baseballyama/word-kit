@@ -127,9 +127,10 @@ this file is a hand-curated overview.
   endnotes, tables, images, hyperlinks, text boxes, UTF-8 BOM, lists)
   and the python-docx test corpus. The ISO/IEC 29500 Strict variant is
   explicitly out of scope today and remains pass-through only.
-- 512 tests, all running in vitest under Node ≥ 20; the public surface
+- 512 tests, all running in vitest under Node 22 and 24; the public surface
   also runs in modern browsers (no Node-only dependencies in the published
   bundles). The browser-preview tests run under happy-dom (jsdom's
   cross-realm `Uint8Array` confused fflate's type guards).
-- CI gate runs typecheck, lint, format check, tests across Node 20/22/24,
-  AND the tree-shake budget check.
+- CI gate runs typecheck, lint, format check, tests across Node 22 / 24,
+  AND the tree-shake budget check. Node 20 was dropped from the matrix
+  after it reached end-of-life on 2026-04-30.

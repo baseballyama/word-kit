@@ -29,7 +29,7 @@
   ];
 
   const stats = [
-    { label: 'tests', value: '512', sub: 'vitest, Node 20 / 22 / 24' },
+    { label: 'tests', value: '512', sub: 'vitest, Node 22 + 24' },
     { label: 'bundle', value: '~42 KB', sub: 'minimal slice · ~131 KB full' },
     { label: 'targets', value: 'Node + browser', sub: 'ESM only · no Node-only deps' },
   ];
@@ -47,7 +47,7 @@
       <span class="meta-dot"></span>
       <span class="meta-tag">pre-1.0 · MIT · function API</span>
       <span class="meta-sep">/</span>
-      <span class="meta-tag">Node 20+ · browsers</span>
+      <span class="meta-tag">Node 22+ · browsers</span>
     </div>
 
     <h1 class="display">

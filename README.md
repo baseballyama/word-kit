@@ -108,35 +108,49 @@ a more appropriate library. See [`CLAUDE.md`](./CLAUDE.md) ("Scope discipline").
 ```
 .
 ├── packages/
-│   ├── core/             # @word-kit/core      — public Docx wrapper
-│   ├── preview/          # @word-kit/preview   — browser preview (wraps docx-preview)
-│   ├── opc/              # @word-kit/opc       — OPC (ZIP + Content Types + rels)
-│   ├── ooxml-xml/        # @word-kit/ooxml-xml — namespace-aware XML parser/serializer
-│   └── wordprocessingml/ # @word-kit/wml       — WML AST + parsers + builders
+│   ├── core/                  # @word-kit/core      — public Docx wrapper
+│   ├── preview/               # @word-kit/preview   — browser preview (wraps docx-preview)
+│   ├── opc/                   # @word-kit/opc       — OPC (ZIP + Content Types + rels)
+│   ├── ooxml-xml/             # @word-kit/ooxml-xml — namespace-aware XML parser/serializer
+│   └── wordprocessingml/      # @word-kit/wml       — WML AST + parsers + builders
+├── site/                      # SvelteKit docs site (pagefind search + preview playground)
 ├── docs/
-│   └── specs/                # Distilled spec notes + ECMA-376 fetcher target
-├── references/               # External OSS / spec material (submodules)
+│   ├── specs/                 # Distilled spec notes + ECMA-376 fetcher target
+│   └── PLAN-PREVIEW.md        # Why @word-kit/preview wraps docx-preview, final
+├── references/                # External OSS / spec material (submodules)
 ├── scripts/
-│   └── fetch-specs.sh        # Downloads ECMA-376 PDFs + XSDs into docs/specs/
-├── .changeset/               # Changesets — drives versioning + npm release
-├── .github/                  # Issue / PR templates and CI / release workflows
-├── .claude/skills/           # Workflow guides for Claude Code agents
-├── CLAUDE.md                 # Engineering principles for contributors and AI
-├── PLAN.md                   # Living implementation plan + progress table
-├── SECURITY.md               # Private vulnerability reporting
-├── .oxlintrc.json            # oxlint config
-└── .oxfmtrc.json             # oxfmt config (Prettier-compatible)
+│   ├── fetch-specs.sh         # Downloads ECMA-376 PDFs + XSDs into docs/specs/
+│   ├── generate-samples.mjs   # `pnpm sample` — writes 32 demonstration .docx files
+│   └── check-tree-shake.mjs   # `pnpm check:tree-shake` — bundle-budget CI gate
+├── .changeset/                # Changesets — drives versioning + npm release
+├── .github/                   # Issue / PR templates and CI / release / deploy workflows
+├── .claude/skills/            # Workflow guides for Claude Code agents
+├── CLAUDE.md                  # Engineering principles for contributors and AI
+├── CONTRIBUTING.md            # Dev environment, workflow, code style
+├── PLAN.md                    # Living implementation plan + progress table
+├── SECURITY.md                # Private vulnerability reporting
+├── .oxlintrc.json             # oxlint config
+└── .oxfmtrc.json              # oxfmt config (Prettier-compatible)
 ```
 
 ## Development
 
 ```bash
-pnpm install           # one-time setup
+pnpm install           # one-time setup (use --recurse-submodules for fixture corpora)
 pnpm typecheck         # tsc --noEmit across all packages
 pnpm lint              # oxlint
 pnpm format:check      # oxfmt --check
-pnpm test              # vitest run
 pnpm build             # tsdown (rolldown), all packages
+pnpm test              # builds first via `pretest`, then runs vitest (512 tests)
+pnpm check:tree-shake  # CI bundle-budget gate (~42 KB minimal vs ~131 KB full)
+pnpm sample            # writes 32 demonstration .docx files into ./samples/
+```
+
+For the docs site:
+
+```bash
+pnpm --filter word-kit-site dev    # http://localhost:5173 with hot reload
+pnpm --filter word-kit-site build  # static export + pagefind search index
 ```
 
 See [`.claude/skills/run-check-and-test/SKILL.md`](./.claude/skills/run-check-and-test/SKILL.md)

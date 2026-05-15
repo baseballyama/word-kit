@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:tree-shake": "node scripts/check-tree-shake.mjs",
+    "check:api-page": "node scripts/check-api-page.mjs",
     "sample": "node scripts/generate-samples.mjs",
     "lint": "oxlint",
     "format": "oxfmt",

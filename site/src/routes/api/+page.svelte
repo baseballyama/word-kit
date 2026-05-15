@@ -28,6 +28,7 @@
         { name: 'appendLineBreak' },
         { name: 'appendSectionBreak' },
         { name: 'clearBody' },
+        { name: 'paragraphs' },
       ],
     },
     {
@@ -45,8 +46,15 @@
         { name: 'clearRunFormat' },
         { name: 'getRunFormat' },
         { name: 'setParagraphAlignment' },
+        { name: 'getParagraphAlignment' },
         { name: 'setParagraphIndent' },
         { name: 'setParagraphSpacing' },
+        { name: 'setParagraphBorders' },
+        { name: 'setParagraphShading' },
+        { name: 'getParagraphStyle' },
+        { name: 'getParagraphNumbering' },
+        { name: 'mergeAdjacentRuns' },
+        { name: 'mergeAdjacentRunsInBody' },
       ],
     },
     {
@@ -74,6 +82,15 @@
         { name: 'removeTable' },
         { name: 'removeAllTables' },
         { name: 'unwrapTable' },
+        { name: 'appendTableRow' },
+        { name: 'removeTableRow' },
+        { name: 'setTableRowAsHeader' },
+        { name: 'setTableRowHeight' },
+        { name: 'setTableBorders' },
+        { name: 'setTableCellText' },
+        { name: 'getTableCellText' },
+        { name: 'setTableCellShading' },
+        { name: 'setTableCellVerticalAlign' },
       ],
     },
     {
@@ -134,7 +151,6 @@
         { name: 'appendField' },
         { name: 'addTableOfContents' },
         { name: 'appendMergeField' },
-        { name: 'WORD_FIELDS' },
         { name: 'acceptAllRevisions' },
         { name: 'rejectAllRevisions' },
       ],
@@ -158,6 +174,7 @@
       title: 'Diagnostics',
       entries: [
         { name: 'validate' },
+        { name: 'validatePackage' },
         { name: 'statistics' },
         { name: 'outline' },
         { name: 'fields' },
@@ -166,6 +183,27 @@
     },
     {
       num: '12',
+      title: 'Low-level part access',
+      entries: [
+        { name: 'stylesPart' },
+        { name: 'numberingPart' },
+        { name: 'commentsPart' },
+        { name: 'footnotesPart' },
+        { name: 'endnotesPart' },
+      ],
+    },
+    {
+      num: '13',
+      title: 'Page-size & margin constants',
+      entries: [
+        { name: 'PAGE_SIZE_A4' },
+        { name: 'PAGE_SIZE_LETTER' },
+        { name: 'MARGINS_NORMAL' },
+        { name: 'VERSION' },
+      ],
+    },
+    {
+      num: '14',
       title: 'Browser preview (@word-kit/preview)',
       entries: [
         { name: 'previewToDOM', sig: '(source, container, options?) => Promise<Handle>' },

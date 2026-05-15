@@ -66,6 +66,13 @@ jobs:
         # this job fail loudly instead of silently bloating bundles.
         run: pnpm check:tree-shake
 
+      - name: Docs API-page coverage
+        # Asserts site/src/routes/api/+page.svelte lists every named export
+        # from @word-kit/core (and only those — no ghost names left behind
+        # from renames). Catches "I added a function but forgot to put it
+        # on the docs site" and the inverse.
+        run: pnpm check:api-page
+
   # Multi-version test matrix. Adapt the matrix to the runtimes the project
   # supports. Drop versions that are past their EOL date.
   #

@@ -10,6 +10,10 @@
   let dropping = $state<boolean>(false);
   let docxModule = $state<typeof import('@word-kit/core') | null>(null);
   let previewModule = $state<typeof import('@word-kit/preview') | null>(null);
+  // The actual bytes currently mounted in the preview, kept so that the
+  // download button can return the same .docx the user is looking at —
+  // whether that's the built-in sample or a file they just uploaded.
+  let lastBytes = $state<Uint8Array | null>(null);
   let currentDispose: (() => void) | null = null;
 
   async function ensureModules(): Promise<{
@@ -100,6 +104,7 @@
       });
       currentDispose = () => handle.dispose();
       docxBytes = bytes.byteLength;
+      lastBytes = bytes;
       status = `Rendered ${fileName} — ${bytes.byteLength.toLocaleString()} bytes.`;
     } catch (err) {
       status = `Failed: ${(err as Error).message}`;
@@ -144,22 +149,18 @@
   }
 
   function downloadCurrent(): void {
-    if (!docxModule || docxBytes === 0) return;
-    // Re-build the sample bytes for download. Using rebuild rather than
-    // capturing the original byte array means a future "open + edit"
-    // playground can reuse this code path verbatim.
-    const bytes = buildSampleBytes(docxModule);
-    // Slice + transfer into a fresh ArrayBuffer so Blob's BlobPart type
-    // (which wants ArrayBuffer-backed views, not SharedArrayBuffer) is
-    // satisfied under strict TS lib settings.
-    const ab = bytes.slice().buffer as ArrayBuffer;
+    if (!lastBytes) return;
+    // Slice the in-memory bytes into a fresh ArrayBuffer so Blob's
+    // BlobPart type (which wants ArrayBuffer-backed views, not
+    // SharedArrayBuffer) is satisfied under strict TS lib settings.
+    const ab = lastBytes.slice().buffer as ArrayBuffer;
     const blob = new Blob([ab], {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'word-kit-sample.docx';
+    a.download = fileName.endsWith('.docx') ? fileName : `${fileName || 'word-kit'}.docx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -207,8 +208,8 @@
       <span>Open .docx…</span>
     </label>
 
-    <button class="btn ghost" onclick={downloadCurrent} disabled={docxBytes === 0}>
-      Download sample bytes
+    <button class="btn ghost" onclick={downloadCurrent} disabled={!lastBytes}>
+      Download current bytes
     </button>
 
     <dl class="status">
@@ -230,8 +231,8 @@
       <strong>What is this?</strong>
       <br />
       A read-only render. To edit, build a <code>Docx</code> with
-      <code>@word-kit/core</code> and download the bytes (the
-      <em>Generate sample</em> button does both).
+      <code>@word-kit/core</code>; <em>Download current bytes</em> hands you back
+      whatever <code>.docx</code> is mounted right now — sample or upload.
     </p>
 
     <p class="note muted">

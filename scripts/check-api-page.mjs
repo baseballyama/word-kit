@@ -14,8 +14,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, "..");
 const CORE_DIST = resolve(ROOT, "packages/core/dist/index.mjs");
 const API_PAGE = resolve(ROOT, "site/src/routes/api/+page.svelte");
 
@@ -48,8 +48,10 @@ const TOLERATED_NON_CORE = new Set(["previewToDOM"]);
 // --- Diff and report. ------------------------------------------------
 
 const exported = new Set(exportedNames);
-const missingFromPage = [...exported].filter((n) => !advertised.has(n)).sort();
-const stale = [...advertised].filter((n) => !exported.has(n) && !TOLERATED_NON_CORE.has(n)).sort();
+const missingFromPage = [...exported].filter((n) => !advertised.has(n)).toSorted();
+const stale = [...advertised]
+  .filter((n) => !exported.has(n) && !TOLERATED_NON_CORE.has(n))
+  .toSorted();
 
 let failed = false;
 

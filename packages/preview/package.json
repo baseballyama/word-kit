@@ -1,0 +1,55 @@
+{
+  "name": "@word-kit/preview",
+  "version": "0.0.0",
+  "description": "Browser preview for word-kit .docx documents.",
+  "keywords": [
+    "docx",
+    "ooxml",
+    "preview",
+    "renderer",
+    "word",
+    "wordprocessingml"
+  ],
+  "homepage": "https://github.com/baseballyama/word-kit#readme",
+  "bugs": {
+    "url": "https://github.com/baseballyama/word-kit/issues"
+  },
+  "license": "MIT",
+  "author": "Yuichiro Yamashita",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baseballyama/word-kit.git",
+    "directory": "packages/preview"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@word-kit/core": "workspace:*",
+    "docx-preview": "^0.3.6",
+    "fflate": "^0.8.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

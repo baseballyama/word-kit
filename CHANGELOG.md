@@ -47,6 +47,10 @@ this file is a hand-curated overview.
   comments, footnotes/endnotes, hyperlinks, fields, and document properties.
 - `@word-kit/core` — the public `Docx` interface and standalone-function API
   wrapping the lower packages.
+- `@word-kit/preview` — browser-side read-only preview. Single function entry,
+  `previewToDOM(source, container, options?) → Promise<Handle>`. v0
+  implementation wraps the OSS `docx-preview` (Apache-2.0). The wrap is
+  intentional and final; see `docs/PLAN-PREVIEW.md` for the rationale.
 
 #### Authoring (function API on `@word-kit/core`)
 
@@ -82,8 +86,36 @@ this file is a hand-curated overview.
 - Core / app properties: `coreProperties`, `setCoreProperties`,
   `appProperties`, `setAppProperties`, `title`, `author`,
   `setTitle`, `setAuthor`.
+- Templates (PowerPoint-style "open a designed base, append content"):
+  `mergeStylesFromTemplate`, `findStyleIdByName`,
+  `setParagraphStyle`, `imageReferences`, `replaceImageByAltText`.
 - Diagnostics: `validate(doc)`, `statistics(doc)`, `outline(doc)`,
   `fields(doc)`.
+
+#### Browser preview (function API on `@word-kit/preview`)
+
+- `previewToDOM(source, container, options?)` renders a `Docx`,
+  `Uint8Array`, `Blob`, or `ArrayBuffer` into a DOM container.
+  Returns an idempotent `Handle.dispose()` for teardown.
+- Options: `classPrefix` (default `"wk-"`), `inWrapper`,
+  `breakPages`, `renderFonts`, `experimentalComments`,
+  `experimentalChanges`. All overridable.
+
+### Build + tooling
+
+- `tsdown` (rolldown-based) replaces `tsup` for the bundling step.
+  Output extensions changed from `.js`/`.d.ts` to `.mjs`/`.d.mts`.
+- `pnpm test` now runs `pnpm build` first via the npm-standard
+  `pretest` hook so cross-package imports always resolve to fresh
+  dist.
+- New CI gate: `pnpm check:tree-shake` budgets a minimal
+  `createDocx + appendParagraph + toUint8Array` bundle (~42 KB
+  minified) against the full surface (~131 KB).
+- `pnpm sample` writes 32 demonstration `.docx` files into
+  `./samples/` for manual verification in Microsoft Word.
+- New perf-smoke test catches accidental quadratic regressions:
+  10k-paragraph round-trip in 220 ms locally; budget is 10 s per
+  block to leave room for slow CI.
 
 ### Implementation notes
 

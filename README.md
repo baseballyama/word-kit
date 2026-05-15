@@ -64,12 +64,33 @@ See [`packages/core/README.md`](./packages/core/README.md) for the full API
 walkthrough (images, comments, footnotes, headers/footers, bookmarks,
 hyperlinks, tracked changes, core document properties).
 
+## Browser preview
+
+Pair `@word-kit/core` with [`@word-kit/preview`](./packages/preview/README.md)
+to render any `Docx` value as a read-only DOM tree:
+
+```ts
+import { openDocx } from "@word-kit/core";
+import { previewToDOM } from "@word-kit/preview";
+
+const doc = openDocx(bytes);
+const handle = await previewToDOM(doc, document.getElementById("preview")!);
+// later:
+handle.dispose();
+```
+
+`@word-kit/preview` wraps the OSS [`docx-preview`](https://github.com/VolodymyrBaydalka/docxjs)
+renderer behind a stable function-API entry point. The wrap is intentional and
+final — see [`docs/PLAN-PREVIEW.md`](./docs/PLAN-PREVIEW.md) for the rationale.
+
 ## Scope
 
 **In scope**
 
 - WordprocessingML (`.docx`) — read, edit, write.
 - OPC packaging (ECMA-376 Part 2), DrawingML — as the underlying layers.
+- **Browser preview** — `@word-kit/preview` wraps `docx-preview` so callers can
+  render docx content into a DOM container without spinning up a server.
 
 **Out of scope (for now)**
 
@@ -77,11 +98,10 @@ hyperlinks, tracked changes, core document properties).
 
 **Out of scope (permanent)**
 
-- Rendering to PDF / HTML, headless Word automation, binary `.doc` (pre-2007).
+- Rendering to PDF, headless Word automation, binary `.doc` (pre-2007).
 
-If a feature request only makes sense for pptx / xlsx, or for rendering, it
-will be redirected to a more appropriate library. See [`CLAUDE.md`](./CLAUDE.md)
-("Scope discipline").
+If a feature request only makes sense for pptx / xlsx, it will be redirected to
+a more appropriate library. See [`CLAUDE.md`](./CLAUDE.md) ("Scope discipline").
 
 ## Repository layout
 
@@ -89,6 +109,7 @@ will be redirected to a more appropriate library. See [`CLAUDE.md`](./CLAUDE.md)
 .
 ├── packages/
 │   ├── core/             # @word-kit/core      — public Docx wrapper
+│   ├── preview/          # @word-kit/preview   — browser preview (wraps docx-preview)
 │   ├── opc/              # @word-kit/opc       — OPC (ZIP + Content Types + rels)
 │   ├── ooxml-xml/        # @word-kit/ooxml-xml — namespace-aware XML parser/serializer
 │   └── wordprocessingml/ # @word-kit/wml       — WML AST + parsers + builders

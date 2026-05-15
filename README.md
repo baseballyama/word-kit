@@ -144,6 +144,8 @@ for the canonical pre-PR quality gate.
 
 ## Contributing
 
+- Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the development
+  environment, workflow, and test layout.
 - Issues and PRs **must** follow the templates under
   [`.github/`](./.github/). Submissions that strip the template structure are
   auto-closed by the template-compliance workflow.

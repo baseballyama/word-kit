@@ -369,6 +369,85 @@ export function replaceImage(doc: Docx, partName: string, newBytes: Uint8Array):
   return true;
 }
 
+/**
+ * List inline drawings in the body together with their alt text and the
+ * media part they reference. Empty alt text is reported as `""`. Useful
+ * for auditing a template ("which image is the logo?") before deciding
+ * what to swap with {@link replaceImageByAltText}.
+ */
+export function imageReferences(
+  doc: Docx,
+): Array<{ relId: string; partName: string; altText: string }> {
+  const docRels = partRelationships(doc.opc, doc.partName);
+  const out: Array<{ relId: string; partName: string; altText: string }> = [];
+  const visit = (el: XmlElement): void => {
+    if (el.name.uri === WML_NS && el.name.local === "drawing") {
+      const docPr = findDescendantByLocal(el, "docPr");
+      const altText = docPr?.attrs.find((a) => a.name.local === "descr")?.value ?? "";
+      const blip = findDescendantByLocal(el, "blip");
+      const relId = blip?.attrs.find(
+        (a) => a.name.local === "embed" && a.name.prefix === "r",
+      )?.value;
+      if (relId !== undefined) {
+        const rel = allRelationships(docRels).find((r) => r.id === relId);
+        if (rel) {
+          const partName = resolvePartTarget(doc, rel.target);
+          out.push({ relId, partName, altText });
+        }
+      }
+      return;
+    }
+    for (const child of el.children) {
+      if (child.kind === "element") visit(child);
+    }
+  };
+  for (const block of doc.document.body.blocks) {
+    if (block.kind === "paragraph") {
+      for (const child of block.children) {
+        if (child.kind === "raw") visit(child.node);
+        else if (child.kind === "run") {
+          for (const piece of child.pieces) {
+            if (piece.kind === "drawing") visit(piece.node);
+            else if (piece.kind === "raw") visit(piece.node);
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Replace every image whose alt text exactly matches `altText` with
+ * `newBytes`. Returns the number of media parts replaced (a single
+ * media part may be referenced by multiple drawings — each unique part
+ * is updated once).
+ *
+ * Pair with {@link imageReferences} to discover the alt texts available
+ * in a template.
+ */
+export function replaceImageByAltText(doc: Docx, altText: string, newBytes: Uint8Array): number {
+  const matches = imageReferences(doc).filter((r) => r.altText === altText);
+  const seen = new Set<string>();
+  let replaced = 0;
+  for (const m of matches) {
+    if (seen.has(m.partName)) continue;
+    seen.add(m.partName);
+    if (replaceImage(doc, m.partName, newBytes)) replaced++;
+  }
+  return replaced;
+}
+
+function findDescendantByLocal(root: XmlElement, local: string): XmlElement | undefined {
+  if (root.name.local === local) return root;
+  for (const child of root.children) {
+    if (child.kind !== "element") continue;
+    const found = findDescendantByLocal(child, local);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 function collectHeaderFooterParts(
   doc: Docx,
   relType: string,

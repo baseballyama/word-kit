@@ -736,6 +736,124 @@ export function setParagraphSpacing(p: WmlParagraph, spacing: ParagraphSpacing):
   else (pPr.children as XmlElement[]).push(newEl);
 }
 
+export interface ParagraphBordersOptions {
+  /** Stroke style — defaults to `"single"`. Pass `"none"` to clear borders. */
+  readonly style?: TableBorderStyle;
+  /** Stroke width in eighths of a point. Defaults to 4 (½ pt). */
+  readonly sizeEighthsOfPoint?: number;
+  /** Hex RGB without a leading `#`. Defaults to `"auto"`. */
+  readonly color?: string;
+  /**
+   * Distance in points (`w:space`) between text and border. Defaults to 4.
+   * Valid range is 0–31 per the spec; values outside are clamped silently
+   * by Word.
+   */
+  readonly spacePt?: number;
+  /**
+   * Sides to apply. Defaults to all four (`top`, `left`, `bottom`, `right`)
+   * — pass a subset to draw, eg, only a bottom rule under headings.
+   */
+  readonly sides?: ReadonlyArray<"top" | "left" | "bottom" | "right">;
+}
+
+/**
+ * Set borders on a paragraph's pPr. Replaces any existing
+ * `<w:pBdr>` block.
+ *
+ * Common patterns:
+ *
+ * - Bottom rule under a heading:
+ *   `setParagraphBorders(p, { sides: ["bottom"], sizeEighthsOfPoint: 12 });`
+ *
+ * - Full box around a callout paragraph:
+ *   `setParagraphBorders(p, { color: "808080" });`
+ *
+ * - Clear an existing border block:
+ *   `setParagraphBorders(p, { style: "none" });`
+ */
+export function setParagraphBorders(
+  paragraph: WmlParagraph,
+  options: ParagraphBordersOptions = {},
+): void {
+  const pPr = ensurePPr(paragraph);
+  const style = options.style ?? "single";
+  const sz = String(options.sizeEighthsOfPoint ?? 4);
+  const color = options.color ?? "auto";
+  const space = String(options.spacePt ?? 4);
+  const sides = options.sides ?? ["top", "left", "bottom", "right"];
+  const children = pPr.children as XmlElement[];
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === "pBdr") {
+      children.splice(i, 1);
+    }
+  }
+  const sideAttrs = (): XmlAttr[] => [
+    wmlAttr("val", style),
+    wmlAttr("sz", sz),
+    wmlAttr("space", space),
+    wmlAttr("color", color),
+  ];
+  const pBdr: XmlElement = {
+    kind: "element",
+    name: { uri: WML_NS, local: "pBdr", prefix: "w" },
+    attrs: [],
+    children: sides.map((s) => wmlEmpty(s, sideAttrs())),
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+  // pBdr appears after pStyle and numPr per the schema; insert after the
+  // last "structural" pPr child if any are present.
+  const tailLocals = new Set(["pStyle", "keepNext", "keepLines", "numPr"]);
+  let insertAt = 0;
+  for (let i = 0; i < children.length; i++) {
+    const c = children[i];
+    if (c && c.kind === "element" && tailLocals.has(c.name.local)) insertAt = i + 1;
+  }
+  children.splice(insertAt, 0, pBdr);
+}
+
+export interface ParagraphShadingOptions {
+  /** Hex RGB fill colour. Defaults to `"auto"`. */
+  readonly fill?: string;
+  /** Pattern overlaid on the fill. Defaults to `"clear"` (flat). */
+  readonly pattern?:
+    | "clear"
+    | "solid"
+    | "horzStripe"
+    | "vertStripe"
+    | "diagStripe"
+    | "diagCross"
+    | "thinHorzStripe"
+    | "thinVertStripe";
+  /** Pattern stroke colour. Defaults to `"auto"`. */
+  readonly color?: string;
+}
+
+/** Apply background shading to a paragraph (Word's "highlight" — but applied
+ * to the whole paragraph rather than a run). Replaces any existing
+ * `<w:shd>` on pPr.
+ */
+export function setParagraphShading(
+  paragraph: WmlParagraph,
+  options: ParagraphShadingOptions = {},
+): void {
+  const pPr = ensurePPr(paragraph);
+  const fill = options.fill ?? "auto";
+  const pattern = options.pattern ?? "clear";
+  const color = options.color ?? "auto";
+  const children = pPr.children as XmlElement[];
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === "shd") {
+      children.splice(i, 1);
+    }
+  }
+  children.push(
+    wmlEmpty("shd", [wmlAttr("val", pattern), wmlAttr("color", color), wmlAttr("fill", fill)]),
+  );
+}
+
 function ensurePPr(p: WmlParagraph): XmlElement {
   if (p.pPr) return p.pPr;
   const pPr: XmlElement = {

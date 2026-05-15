@@ -1338,16 +1338,33 @@ function removeAllNotes(doc: Docx, kind: "footnote" | "endnote"): number {
   if (kind === "footnote") doc.footnotesDirty = true;
   else doc.endnotesDirty = true;
   // Strip <w:footnoteReference> / <w:endnoteReference> runs from body
-  // paragraphs.
+  // paragraphs. Match both shapes:
+  //   - raw {kind:"raw", node:<w:r><w:footnoteReference/></w:r>} (the
+  //     output addFootnote produces).
+  //   - parsed WmlRun whose only piece is a raw <w:footnoteReference/>
+  //     (the shape parseRun produces after a save+open round-trip).
   const refLocal = kind === "footnote" ? "footnoteReference" : "endnoteReference";
   const stripFromParagraph = (p: WmlParagraph): void => {
     p.children = p.children.filter((child) => {
-      if (child.kind !== "raw") return true;
-      if (child.node.name.uri !== WML_NS) return true;
-      if (child.node.name.local !== "r") return true;
-      return !child.node.children.some(
-        (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === refLocal,
-      );
+      if (child.kind === "raw") {
+        if (child.node.name.uri !== WML_NS) return true;
+        if (child.node.name.local !== "r") return true;
+        return !child.node.children.some(
+          (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === refLocal,
+        );
+      }
+      if (child.kind === "run") {
+        const piecesOnlyRef =
+          child.pieces.length > 0 &&
+          child.pieces.every(
+            (piece) =>
+              piece.kind === "raw" &&
+              piece.node.name.uri === WML_NS &&
+              piece.node.name.local === refLocal,
+          );
+        if (piecesOnlyRef) return false;
+      }
+      return true;
     });
   };
   const walk = (blocks: WmlBlock[]): void => {

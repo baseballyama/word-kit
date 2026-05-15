@@ -68,6 +68,10 @@ jobs:
 
   # Multi-version test matrix. Adapt the matrix to the runtimes the project
   # supports. Drop versions that are past their EOL date.
+  #
+  # Node 20 reached end-of-life in 2026-04, and tsdown's runtime config
+  # loader (the `unrun` helper) no longer resolves under it. We test on
+  # the two current LTS lines only.
   test:
     name: Test (Node ${{ matrix.node-version }})
     needs: static
@@ -75,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["20", "22", "24"]
+        node-version: ["22", "24"]
     steps:
       # references/* (mammoth.js, python-docx, …) are git submodules carrying
       # real Word .docx fixtures used by the fixture-coverage and

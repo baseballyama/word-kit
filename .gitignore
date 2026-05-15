@@ -4,6 +4,7 @@ build/
 .cache/
 .turbo/
 coverage/
+samples/
 *.log
 .DS_Store
 .vscode/

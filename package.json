@@ -5,6 +5,7 @@
   "scripts": {
     "build": "pnpm -r --filter \"./packages/*\" run build",
     "typecheck": "pnpm -r --filter \"./packages/*\" run typecheck",
+    "pretest": "pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:tree-shake": "node scripts/check-tree-shake.mjs",

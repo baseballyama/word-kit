@@ -40,9 +40,7 @@
 </svelte:head>
 
 <section class="hero">
-  <div class="hero-bg" aria-hidden="true">
-    <div class="hero-glow"></div>
-  </div>
+  <div class="hero-bg" aria-hidden="true"></div>
 
   <div class="hero-inner">
     <div class="hero-meta">
@@ -176,25 +174,6 @@
     background:
       radial-gradient(circle at 18% -10%, var(--accent-glow), transparent 50%),
       radial-gradient(circle at 100% 30%, var(--brass-soft), transparent 55%);
-  }
-
-  /* Quiet manuscript-paper baselines under the hero — counterpart of
-   * xlsx-kit's spreadsheet column glow. Horizontal, evenly spaced. */
-  .hero-glow {
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(
-        0deg,
-        transparent 0,
-        transparent calc(28px - 1px),
-        var(--rule) calc(28px - 1px),
-        var(--rule) 28px,
-        transparent 28px
-      );
-    background-size: 100% 28px;
-    opacity: 0.55;
-    mask-image: radial-gradient(circle at 25% 45%, black 0%, transparent 70%);
   }
 
   .hero-inner {

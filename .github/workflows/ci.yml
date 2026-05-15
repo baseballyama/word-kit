@@ -47,11 +47,16 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Type check
-        run: pnpm typecheck
-
+      # Build before typecheck: every package consumes its siblings via
+      # workspace dependencies whose `.d.mts` files live under `dist/`.
+      # Running `tsc` against an un-built workspace fails to resolve
+      # `@word-kit/ooxml-xml` and friends, even though every individual
+      # package is locally consistent.
       - name: Build
         run: pnpm build
+
+      - name: Type check
+        run: pnpm typecheck
 
       - name: Tree-shake budget
         # Verifies @word-kit/core can be tree-shaken: a minimal entry

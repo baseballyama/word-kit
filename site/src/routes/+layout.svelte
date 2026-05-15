@@ -1,0 +1,113 @@
+<script lang="ts">
+  import '../app.css';
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
+
+  type Props = {
+    children?: import('svelte').Snippet;
+  };
+
+  const { children }: Props = $props();
+</script>
+
+<SiteHeader />
+
+<main>
+  {@render children?.()}
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="cell">
+        <span class="label">Project</span>
+        <a href="https://github.com/baseballyama/word-kit">word-kit</a>
+      </div>
+      <div class="cell">
+        <span class="label">License</span>
+        <span>MIT</span>
+      </div>
+      <div class="cell">
+        <span class="label">Runtime</span>
+        <span>Node 20+ · browsers</span>
+      </div>
+      <div class="cell">
+        <span class="label">Sibling</span>
+        <a href="https://github.com/baseballyama/xlsx-kit">xlsx-kit</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<style>
+  main {
+    min-height: calc(100vh - var(--header-h));
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2.25rem 1.5rem 3rem;
+    background: var(--bg-elev);
+  }
+
+  .footer-inner {
+    max-width: var(--max-wide);
+    margin: 0 auto;
+  }
+
+  .footer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  .cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.95rem 1.1rem;
+    border-right: 1px solid var(--border);
+    font-size: 0.92rem;
+    color: var(--fg);
+  }
+
+  .cell:last-child {
+    border-right: none;
+  }
+
+  .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+  }
+
+  .cell a {
+    font-family: var(--display);
+    font-weight: 540;
+    font-size: 1.05rem;
+    color: var(--fg);
+    font-variation-settings: 'opsz' 64, 'SOFT' 30;
+  }
+
+  .cell a:hover {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  @media (max-width: 600px) {
+    .cell {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cell:last-child {
+      border-bottom: none;
+    }
+  }
+</style>

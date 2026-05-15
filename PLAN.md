@@ -112,17 +112,17 @@
 
 ## 3. 技術スタック
 
-| 領域           | 選定                                                                         | 理由                                        |
-| -------------- | ---------------------------------------------------------------------------- | ------------------------------------------- |
-| 言語           | TypeScript (strict)                                                          | 型で OOXML スキーマを表現する旨味が大きい   |
-| パッケージ管理 | pnpm workspaces                                                              | monorepo 性能と決定的解決 (既存 scaffold)   |
-| ビルド         | tsdown (rolldown ベース)                                                     | ESM-only, dts 同梱, 高速 (rolldown / Oxc)   |
-| テスト         | vitest                                                                       | ESM ネイティブ, in-browser テスト可         |
-| Lint/Format    | oxlint + oxfmt (既存 scaffold)                                               | 高速、設定軽量                              |
-| バージョニング | changesets (既存 scaffold)                                                   | monorepo の semver と changelog 自動化      |
-| ZIP            | **fflate** (MIT)                                                             | 軽量・isomorphic。JSZip (GPLv3 dual) を回避 |
-| XML            | **fast-xml-parser** を初期採用、将来 custom SAX に差し替え可能な抽象を設ける | 速度と round-trip 性のバランス              |
-| ターゲット     | Node 20/22/24, モダンブラウザ (ES2022)                                       | Buffer 非依存・WebStreams 利用              |
+| 領域           | 選定                                                                         | 理由                                          |
+| -------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
+| 言語           | TypeScript (strict)                                                          | 型で OOXML スキーマを表現する旨味が大きい     |
+| パッケージ管理 | pnpm workspaces                                                              | monorepo 性能と決定的解決 (既存 scaffold)     |
+| ビルド         | tsdown (rolldown ベース)                                                     | ESM-only, dts 同梱, 高速 (rolldown / Oxc)     |
+| テスト         | vitest                                                                       | ESM ネイティブ, in-browser テスト可           |
+| Lint/Format    | oxlint + oxfmt (既存 scaffold)                                               | 高速、設定軽量                                |
+| バージョニング | changesets (既存 scaffold)                                                   | monorepo の semver と changelog 自動化        |
+| ZIP            | **fflate** (MIT)                                                             | 軽量・isomorphic。JSZip (GPLv3 dual) を回避   |
+| XML            | **fast-xml-parser** を初期採用、将来 custom SAX に差し替え可能な抽象を設ける | 速度と round-trip 性のバランス                |
+| ターゲット     | Node 22/24, モダンブラウザ (ES2022)                                          | Node 20 は 2026-04 EOL のため matrix から除外 |
 
 ---
 
@@ -741,7 +741,7 @@ const xml = doc.parts.get("/word/document.xml")!.xml; // Raw XML AST
 ### CI
 
 - GitHub Actions
-- matrix: Node 20 / 22 / 24, macOS / Ubuntu
+- matrix: Node 22 / 24, macOS / Ubuntu (Node 20 は 2026-04 EOL)
 - ブラウザ: vitest + playwright (Chromium + WebKit + Firefox)
 - LibreOffice headless: `soffice --headless --convert-to pdf out.docx` の zero exit を確認
 

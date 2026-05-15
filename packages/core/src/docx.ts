@@ -60,6 +60,7 @@ import {
   bulletAbstractNumLevels,
   decimalAbstractNumLevels,
   documentText,
+  mergeAdjacentRuns as wmlMergeAdjacentRuns,
   EMPTY_COMMENTS_XML,
   EMPTY_NUMBERING_XML,
   extensionForImageContentType,
@@ -425,6 +426,36 @@ export function paragraphs(doc: Docx): readonly WmlParagraph[] {
 /** Table blocks in document order. */
 export function tables(doc: Docx): readonly WmlTable[] {
   return doc.document.body.blocks.filter(isTable);
+}
+
+/**
+ * Walk every paragraph in the body — top-level and inside table cells —
+ * and call {@link mergeAdjacentRuns} on each one. Returns the total
+ * number of merges performed across the whole body.
+ *
+ * Useful as a one-shot cleanup pass on a template that's been
+ * fragmented into many tiny same-formatting runs (typically by Word's
+ * spell-checker). Header/footer/comment/footnote parts are not touched —
+ * call this once per side-part if you want to extend coverage.
+ */
+export function mergeAdjacentRunsInBody(doc: Docx): number {
+  let total = 0;
+  const visit = (blocks: readonly WmlBlock[]): void => {
+    for (const b of blocks) {
+      if (b.kind === "paragraph") {
+        total += wmlMergeAdjacentRuns(b);
+      } else if (b.kind === "table") {
+        for (const row of b.rows) {
+          for (const cell of row.cells) {
+            visit(cell.paragraphs);
+          }
+        }
+      }
+    }
+  };
+  visit(doc.document.body.blocks);
+  if (total > 0) doc.dirty = true;
+  return total;
 }
 
 /**

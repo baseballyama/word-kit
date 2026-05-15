@@ -873,6 +873,37 @@ export function getParagraphStyle(p: WmlParagraph): string | undefined {
   return refChildVal(p.pPr, "pStyle");
 }
 
+/**
+ * Set or clear a paragraph's `<w:pStyle w:val="…">`. Pass a styleId
+ * (e.g. `"Heading1"`) to apply, or `undefined` to drop the style
+ * reference altogether (paragraph falls back to Normal).
+ *
+ * Note that this only writes the `<w:pStyle>` reference; the styles
+ * part is unaffected. Use {@link addStyle} (in `@word-kit/core`) first
+ * if you're applying a custom style that doesn't exist yet.
+ */
+export function setParagraphStyle(p: WmlParagraph, styleId: string | undefined): void {
+  if (styleId === undefined) {
+    if (!p.pPr) return;
+    const children = p.pPr.children as XmlElement[];
+    for (let i = children.length - 1; i >= 0; i--) {
+      const c = children[i];
+      if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === "pStyle") {
+        children.splice(i, 1);
+      }
+    }
+    return;
+  }
+  const pPr = ensurePPr(p);
+  const children = pPr.children as XmlElement[];
+  const idx = children.findIndex(
+    (c) => c.kind === "element" && c.name.uri === WML_NS && c.name.local === "pStyle",
+  );
+  const newEl = wmlEmpty("pStyle", [wmlAttr("val", styleId)]);
+  if (idx >= 0) children[idx] = newEl;
+  else children.unshift(newEl); // pStyle conventionally appears first.
+}
+
 /** Read `<w:jc w:val>` from a paragraph's pPr as a typed value, or `undefined`. */
 export function getParagraphAlignment(p: WmlParagraph): ParagraphAlignment | undefined {
   const v = refChildVal(p.pPr, "jc");

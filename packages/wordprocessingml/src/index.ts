@@ -40,6 +40,7 @@ export {
   setParagraphIndent,
   setParagraphShading,
   setParagraphSpacing,
+  setParagraphStyle,
   setParagraphText,
   setRunFormat,
   setTableBorders,

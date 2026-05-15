@@ -1405,24 +1405,38 @@ export function removeAllComments(doc: Docx): number {
     part.comments.length = 0;
     doc.commentsDirty = true;
   }
-  // Strip commentRangeStart / commentRangeEnd / commentReference from the body.
+  // Strip commentRangeStart / commentRangeEnd / commentReference from the
+  // body. The reference may live as a raw inline (immediately after
+  // addComment, before any round-trip) OR as a WmlRun whose only piece is a
+  // raw <w:commentReference/> child (the shape produced by parseRun on
+  // re-open). Match both shapes.
   const stripFromParagraph = (p: WmlParagraph): void => {
     p.children = p.children.filter((child) => {
-      if (child.kind !== "raw") return true;
-      const local = child.node.name.local;
-      if (
-        child.node.name.uri === WML_NS &&
-        (local === "commentRangeStart" ||
-          local === "commentRangeEnd" ||
-          (local === "r" &&
-            child.node.children.some(
-              (c) =>
-                c.kind === "element" &&
-                c.name.uri === WML_NS &&
-                c.name.local === "commentReference",
-            )))
-      ) {
-        return false;
+      if (child.kind === "raw") {
+        const local = child.node.name.local;
+        if (child.node.name.uri !== WML_NS) return true;
+        if (local === "commentRangeStart" || local === "commentRangeEnd") return false;
+        if (
+          local === "r" &&
+          child.node.children.some(
+            (c) =>
+              c.kind === "element" && c.name.uri === WML_NS && c.name.local === "commentReference",
+          )
+        ) {
+          return false;
+        }
+        return true;
+      }
+      if (child.kind === "run") {
+        const piecesOnlyCommentRef =
+          child.pieces.length > 0 &&
+          child.pieces.every(
+            (piece) =>
+              piece.kind === "raw" &&
+              piece.node.name.uri === WML_NS &&
+              piece.node.name.local === "commentReference",
+          );
+        if (piecesOnlyCommentRef) return false;
       }
       return true;
     });

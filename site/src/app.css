@@ -1,9 +1,8 @@
-/* word-kit — Editorial spec-sheet design system, manuscript edition.
+/* word-kit — Editorial spec-sheet design system.
  * Sibling to xlsx-kit: same Fraunces / Mona Sans / JetBrains Mono stack,
  * same hairline-bordered atoms (install strip, stats, features, footer
  * grid). Distinct identity comes from a quieter "proof-pen red" accent
- * and horizontal baseline-rule motifs (manuscript paper) instead of
- * xlsx-kit's vertical column lines (spreadsheet grid).
+ * instead of Svelte orange so the type stays the headline.
  *
  * Display: Fraunces. Body: Mona Sans. Code/labels: JetBrains Mono. */
 
@@ -69,32 +68,6 @@ body {
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-/* Manuscript baseline rules — horizontal hairlines drifting behind the
- * site, fading from the top, evoking a sheet of writing paper.
- * Counterpart to xlsx-kit's vertical spreadsheet column motif. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background-image: linear-gradient(
-    0deg,
-    transparent 0,
-    transparent calc(28px - 1px),
-    var(--rule) calc(28px - 1px),
-    var(--rule) 28px,
-    transparent 28px
-  );
-  background-size: 100% 28px;
-  mask-image: linear-gradient(180deg, black 0, black 80vh, transparent 110vh);
-}
-
-body > * {
-  position: relative;
-  z-index: 1;
 }
 
 a {

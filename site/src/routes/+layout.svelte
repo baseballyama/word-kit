@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import { base } from '$app/paths';
   import SiteHeader from '$lib/components/SiteHeader.svelte';
 
   type Props = {
@@ -34,6 +35,10 @@
         <span class="label">Sibling</span>
         <a href="https://github.com/baseballyama/xlsx-kit">xlsx-kit</a>
       </div>
+    </div>
+    <div class="footer-llms">
+      <span class="muted">For LLMs:</span>
+      <a href="{base}/llms.txt">/llms.txt</a>
     </div>
   </div>
 </footer>
@@ -109,5 +114,24 @@
     .cell:last-child {
       border-bottom: none;
     }
+  }
+
+  .footer-llms {
+    margin-top: 1.25rem;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-soft);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .footer-llms .muted {
+    color: var(--fg-muted);
+  }
+
+  .footer-llms a {
+    color: var(--accent);
   }
 </style>

@@ -43,13 +43,6 @@
   <div class="hero-bg" aria-hidden="true"></div>
 
   <div class="hero-inner">
-    <div class="hero-meta">
-      <span class="meta-dot"></span>
-      <span class="meta-tag">pre-1.0 · MIT · function API</span>
-      <span class="meta-sep">/</span>
-      <span class="meta-tag">Node 22+ · browsers</span>
-    </div>
-
     <h1 class="display">
       <span class="line">
         Read &amp; write
@@ -88,10 +81,6 @@
     <div class="install" role="group" aria-label="Install command">
       <span class="install-coord">$</span>
       <code class="install-cmd">pnpm add @word-kit/core @word-kit/preview</code>
-      <span class="install-alt">
-        <span class="alt-sep">/</span>
-        <code>npm i @word-kit/core @word-kit/preview</code>
-      </span>
     </div>
 
     <div class="stats" aria-label="Project stats">
@@ -180,34 +169,6 @@
     position: relative;
     max-width: var(--max-wide);
     margin: 0 auto;
-  }
-
-  .hero-meta {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.7rem;
-    margin-bottom: 1.5rem;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--fg);
-    letter-spacing: 0.04em;
-    flex-wrap: wrap;
-  }
-
-  .meta-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-  }
-
-  .meta-sep {
-    color: var(--fg-faint);
-  }
-
-  .meta-tag {
-    color: var(--fg-soft);
   }
 
   .display {
@@ -375,24 +336,6 @@
     border: none;
     padding: 0;
     color: var(--fg);
-  }
-
-  .install-alt {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    color: var(--fg-muted);
-  }
-
-  .install-alt .alt-sep {
-    color: var(--fg-faint);
-  }
-
-  .install-alt code {
-    background: transparent;
-    border: none;
-    padding: 0;
-    color: var(--fg-soft);
   }
 
   .stats {

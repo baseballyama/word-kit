@@ -47,7 +47,12 @@
           </p>
         </div>
       </header>
-      <CodeBlock html={r.html} title={r.path} coord={String.fromCharCode(64 + i + 1) + "1"} />
+      <CodeBlock
+        html={r.html}
+        source={r.source}
+        title={r.path}
+        coord={String.fromCharCode(64 + i + 1) + "1"}
+      />
     </section>
   {/each}
 

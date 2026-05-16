@@ -18,6 +18,7 @@ export const load: PageServerLoad = async () => {
         title: ex.title,
         description: ex.description,
         path: ex.path,
+        source: ex.source,
         html: await highlight(ex.source, "ts"),
       };
     }),

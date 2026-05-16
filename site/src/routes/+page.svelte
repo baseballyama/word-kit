@@ -5,6 +5,23 @@
 
   const { data }: PageProps = $props();
 
+  const INSTALL_CMD = 'pnpm add @word-kit/core @word-kit/preview';
+  let installCopied = $state(false);
+  let installResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function copyInstall(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(INSTALL_CMD);
+      installCopied = true;
+      if (installResetTimer) clearTimeout(installResetTimer);
+      installResetTimer = setTimeout(() => {
+        installCopied = false;
+      }, 1500);
+    } catch {
+      // Silent fall-through; the text is selectable as a fallback.
+    }
+  }
+
   const features: Array<{ num: string; title: string; body: string }> = [
     {
       num: '01',
@@ -80,7 +97,27 @@
 
     <div class="install" role="group" aria-label="Install command">
       <span class="install-coord">$</span>
-      <code class="install-cmd">pnpm add @word-kit/core @word-kit/preview</code>
+      <code class="install-cmd">{INSTALL_CMD}</code>
+      <button
+        type="button"
+        class="install-copy"
+        class:done={installCopied}
+        onclick={copyInstall}
+        aria-label={installCopied ? 'Copied install command' : 'Copy install command'}
+      >
+        {#if installCopied}
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+            <path d="M3.5 8.5l3 3 6-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Copied</span>
+        {:else}
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+            <rect x="4" y="4" width="9" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M2.5 10.5V3a.5.5 0 0 1 .5-.5h7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <span>Copy</span>
+        {/if}
+      </button>
     </div>
 
     <div class="stats" aria-label="Project stats">
@@ -136,7 +173,7 @@
             <p>{ex.description}</p>
           </div>
         </header>
-        <CodeBlock html={ex.html} title={ex.path} />
+        <CodeBlock html={ex.html} source={ex.source} title={ex.path} />
       </div>
     {/each}
 
@@ -336,6 +373,44 @@
     border: none;
     padding: 0;
     color: var(--fg);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .install-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.25rem 0.55rem;
+    color: var(--fg-soft);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition:
+      color 120ms ease,
+      background 120ms ease,
+      border-color 120ms ease;
+  }
+
+  .install-copy:hover {
+    color: var(--fg);
+    background: var(--bg);
+    border-color: var(--border-strong);
+  }
+
+  .install-copy:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .install-copy.done {
+    color: var(--accent);
+    border-color: var(--accent-soft);
+    background: var(--accent-soft);
   }
 
   .stats {

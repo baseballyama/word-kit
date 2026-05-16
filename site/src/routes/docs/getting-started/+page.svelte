@@ -40,7 +40,12 @@
     <code>Docx</code> object that the rest of the API treats as a value.
   </p>
 
-  <CodeBlock html={data.fromScratch.html} title={data.fromScratch.path} coord="A1" />
+  <CodeBlock
+    html={data.fromScratch.html}
+    source={data.fromScratch.source}
+    title={data.fromScratch.path}
+    coord="A1"
+  />
 
   <h2>Open a template, fill placeholders</h2>
 
@@ -56,7 +61,12 @@
     <code>{'{{name}}'}</code> split across multiple runs are joined before the regex sees them.
   </p>
 
-  <CodeBlock html={data.templateFill.html} title={data.templateFill.path} coord="A2" />
+  <CodeBlock
+    html={data.templateFill.html}
+    source={data.templateFill.source}
+    title={data.templateFill.path}
+    coord="A2"
+  />
 
   <h2>Render in the browser</h2>
 

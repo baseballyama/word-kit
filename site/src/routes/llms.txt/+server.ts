@@ -14,6 +14,8 @@ const BODY = `# word-kit
 
 > OOXML-compliant (ECMA-376) Word \`.docx\` library. Reads, edits, and writes WordprocessingML in both Node 22+ and modern browsers. Lossless round-trip for every element the library doesn't yet model (so hand-designed templates survive intact). Function-first API: every operation is a standalone, tree-shakeable export. Optional companion \`@word-kit/preview\` mounts a read-only render of any \`Docx\` into a DOM container.
 
+This file is a short index. For every page concatenated into a single Markdown document — usable as a one-fetch LLM payload — see [\`/llms-full.txt\`](./llms-full.txt).
+
 ## Packages
 
 - [\`@word-kit/core\`](./api) — the public authoring API. \`Docx\` is a plain interface; every operation is a standalone function. Minimal slice (\`createDocx + appendParagraph + toUint8Array\`) bundles to ~42 KB minified; full surface ~131 KB.

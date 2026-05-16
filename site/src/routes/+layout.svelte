@@ -39,6 +39,8 @@
     <div class="footer-llms">
       <span class="muted">For LLMs:</span>
       <a href="{base}/llms.txt">/llms.txt</a>
+      <span class="dot">·</span>
+      <a href="{base}/llms-full.txt">/llms-full.txt</a>
     </div>
   </div>
 </footer>
@@ -129,6 +131,10 @@
 
   .footer-llms .muted {
     color: var(--fg-muted);
+  }
+
+  .footer-llms .dot {
+    color: var(--fg-faint);
   }
 
   .footer-llms a {

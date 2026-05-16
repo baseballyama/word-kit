@@ -1,9 +1,12 @@
 #!/usr/bin/env node
-// Verify that site/src/routes/api/+page.svelte lists every named export
-// from @word-kit/core (and only those — no ghost names left behind from
-// renames). The site's API page is hand-curated so contributors can group
-// and order the listing, but that means it silently goes stale when an
-// export is added or removed; this script is the safety net.
+// Verify that site/src/lib/api-groups.ts lists every named export from
+// @word-kit/core (and only those — no ghost names left behind from
+// renames). The API listing is hand-curated so contributors can group
+// and order it, but that means it silently goes stale when an export is
+// added or removed; this script is the safety net.
+//
+// Both the `/api` page and `/llms-full.txt` consume `api-groups.ts`, so
+// this single check covers both surfaces.
 //
 // Run via `pnpm check:api-page`. CI runs it after the build job, since
 // it imports the built `packages/core/dist/index.mjs` artefact.
@@ -17,7 +20,7 @@ import { dirname, resolve } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const CORE_DIST = resolve(ROOT, "packages/core/dist/index.mjs");
-const API_PAGE = resolve(ROOT, "site/src/routes/api/+page.svelte");
+const API_GROUPS = resolve(ROOT, "site/src/lib/api-groups.ts");
 
 // --- Read the live exports off the built core bundle. ----------------
 
@@ -26,17 +29,17 @@ const exportedNames = Object.keys(coreExports)
   .filter((n) => n !== "default")
   .filter((n) => !n.startsWith("_")); // private convention, if any
 
-// --- Read what the API page advertises. ------------------------------
+// --- Read what the shared api-groups module advertises. --------------
 
-const pageSrc = readFileSync(API_PAGE, "utf-8");
+const groupsSrc = readFileSync(API_GROUPS, "utf-8");
 
-// `name: "createDocx"` entries inside the `groups` array. We're matching
-// the literal `name:` field, not arbitrary string occurrences, to avoid
-// catching prose mentions inside template descriptions.
+// `name: "createDocx"` entries inside the entries arrays. We match the
+// literal `name:` field rather than arbitrary string occurrences, so
+// nothing in the file's comments accidentally counts.
 const NAME_RE = /\bname:\s*["']([A-Za-z_$][A-Za-z0-9_$]*)["']/g;
 
 const advertised = new Set();
-for (const match of pageSrc.matchAll(NAME_RE)) {
+for (const match of groupsSrc.matchAll(NAME_RE)) {
   advertised.add(match[1]);
 }
 
@@ -58,18 +61,18 @@ let failed = false;
 if (missingFromPage.length) {
   failed = true;
   console.error(
-    `[check:api-page] ${missingFromPage.length} export(s) missing from site/src/routes/api/+page.svelte:\n` +
+    `[check:api-page] ${missingFromPage.length} export(s) missing from site/src/lib/api-groups.ts:\n` +
       missingFromPage.map((n) => `  + ${n}`).join("\n") +
-      "\n→ add them to the appropriate group in the page (or move them to a new group).",
+      "\n→ add them to the appropriate group (or open a new group).",
   );
 }
 
 if (stale.length) {
   failed = true;
   console.error(
-    `[check:api-page] ${stale.length} name(s) on the API page are no longer exported from @word-kit/core:\n` +
+    `[check:api-page] ${stale.length} name(s) in api-groups.ts are no longer exported from @word-kit/core:\n` +
       stale.map((n) => `  - ${n}`).join("\n") +
-      "\n→ remove them from site/src/routes/api/+page.svelte (or, if they moved to another package, add the package to TOLERATED_NON_CORE in this script).",
+      "\n→ remove them from site/src/lib/api-groups.ts (or, if they moved to another package, add the package to TOLERATED_NON_CORE in this script).",
   );
 }
 
@@ -78,5 +81,5 @@ if (failed) {
 }
 
 console.log(
-  `[check:api-page] OK — ${exported.size} core exports, ${advertised.size} entries on the API page (incl. ${TOLERATED_NON_CORE.size} tolerated from sibling packages).`,
+  `[check:api-page] OK — ${exported.size} core exports, ${advertised.size} entries in api-groups.ts (incl. ${TOLERATED_NON_CORE.size} tolerated from sibling packages).`,
 );

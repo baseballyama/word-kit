@@ -37,8 +37,7 @@
     }
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown",

@@ -25,7 +25,6 @@ this file is a hand-curated overview.
   standalone functions instead of classes. The motivation is
   tree-shaking: classes carry every method along with the prototype,
   so a bundler can't drop unused operations once an instance escapes.
-
   - `Docx` is an `interface` (just `{ opc, document, partName, … }`).
   - `Docx.create(…)` → `createDocx(…)`. `Docx.open(bytes)` → `openDocx(bytes)`.
     `Docx.fromBlob(blob)` → `fromBlob(blob)`.

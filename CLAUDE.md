@@ -10,17 +10,20 @@ a template, and the design target is full coverage of the WordprocessingML spec.
 - **Runtime targets**: modern browsers (no Node-only APIs in the published
   bundle) and Node.js LTS (currently 22 and 24 — Node 20 reached EOL
   2026-04 and is no longer in the CI matrix).
-- **Repository layout**: pnpm monorepo under `packages/`. The user-facing entry
-  point is `@word-kit/core`. Lower-level layers (OPC packaging, individual
-  OOXML parts) live in their own packages and are only re-exported through
-  `@word-kit/core` when they belong on the public API.
+- **Repository layout**: the published library `@office-kit/docx` lives at the
+  repo root (`src/`). Its public API is under `src/api/`; the lower-level layers
+  (OPC packaging, XML, WordprocessingML) are inlined under `src/internal/` and
+  bundled into the single package — they are **not** separate npm packages. The
+  browser preview ships separately as `@office-kit/docx-preview` under
+  `packages/preview`. Only symbols re-exported from `src/api/` are public API.
 - **Spec compliance**: the canonical reference is ECMA-376 (Part 1 — Fundamentals
   and Markup Language Reference). When behavior is ambiguous, the spec wins
   over what Microsoft Word happens to do; if Word's actual behavior is the
   load-bearing one (interoperability quirk), keep the spec-correct code path
   and document the Word-specific deviation in a comment.
 - **`references/`** holds external OSS and spec material used while building. It
-  is **never** part of a published package; do not import from it in `packages/`.
+  is **never** part of a published package; do not import from it in `src/` or
+  `packages/`.
 - **`docs/specs/`** is where we keep distilled notes on the parts of the spec we
   implement — useful for first-time contributors who do not want to wade through
   the full ECMA-376 PDF.

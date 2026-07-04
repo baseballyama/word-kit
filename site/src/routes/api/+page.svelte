@@ -17,11 +17,11 @@
     <p class="eyebrow">§ 03 · API reference</p>
     <h1>Every public export, grouped by area.</h1>
     <p class="lede">
-      <code>@word-kit/core</code> exposes <strong>{totalCount}</strong> standalone functions
+      <code>@office-kit/docx</code> exposes <strong>{totalCount}</strong> standalone functions
       and constants. Each one takes a <code>Docx</code> as its first argument (where
       applicable) and is side-effect-free at the module level, so bundlers can tree-shake
       anything you don't import. For full signatures and parameter shapes, see
-      <code>packages/core/src/index.ts</code> and the
+      <code>src/index.ts</code> and the
       <a href="https://github.com/baseballyama/word-kit">repository</a>.
     </p>
   </div>

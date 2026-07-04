@@ -1,13 +1,10 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "rootDir": ".",
+    "noEmit": true,
+    "composite": false
   },
-  "include": [],
-  "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/opc" },
-    { "path": "./packages/ooxml-xml" },
-    { "path": "./packages/wordprocessingml" }
-  ]
+  "include": ["src/**/*.ts", "tsdown.config.ts", "vitest.config.ts"],
+  "exclude": ["src/**/*.test.ts", "dist", "node_modules"]
 }

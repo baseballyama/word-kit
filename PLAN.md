@@ -36,12 +36,12 @@
 | M14 | フィールド API (TOC, MERGEFIELD, PAGE/NUMPAGES/DATE)                        | ✅ 完了 (`addTableOfContents`, `appendMergeField`, `appendField`)     |
 |     | テンプレート (PowerPoint 流: 開いて style 継承で本文を積む)                 | ✅ 完了 (`mergeStylesFromTemplate`, `findStyleIdByName`)              |
 |     | SDT (content control) 高レベル API                                          | ⚪️ raw pass-through で round-trip 可、専用 API は未提供               |
-|     | ブラウザプレビュー (`@word-kit/preview`)                                    | ✅ 完了 (v0 = `docx-preview` をラップ; 詳細は `docs/PLAN-PREVIEW.md`) |
+|     | ブラウザプレビュー (`@office-kit/docx-preview`)                             | ✅ 完了 (v0 = `docx-preview` をラップ; 詳細は `docs/PLAN-PREVIEW.md`) |
 | M15 | ビルド/perf/docs 最終化                                                     | ✅ 完了 (tsdown / perf smoke / sample script / docs 整備)             |
 | M16 | 1.0.0 リリース                                                              | ⚪️ 未着手 (実 Word での dogfood + 初 npm publish 残)                  |
 
 実装は `packages/{core,opc,ooxml-xml,wordprocessingml,preview}` の 5 パッケージで構成。実 Word 出力 docx (mammoth.js + python-docx test corpus) で round-trip 検証済み。
-公開 API は `@word-kit/core` (オプションで `@word-kit/preview`)。詳細は kitchen-sink integration テスト (`packages/core/src/integration.test.ts`) と `pnpm sample` で生成される `./samples/*.docx` を参照。
+公開 API は `@office-kit/docx` (オプションで `@office-kit/docx-preview`)。詳細は kitchen-sink integration テスト (`packages/core/src/integration.test.ts`) と `pnpm sample` で生成される `./samples/*.docx` を参照。
 
 ---
 
@@ -130,7 +130,7 @@
 
 ```
 packages/
-  core/                @word-kit/core         # 公開エントリ。Docx.open / Docx.create
+  core/                @office-kit/docx         # 公開エントリ。Docx.open / Docx.create
   opc/                 @word-kit/opc          # ZIP, [Content_Types].xml, .rels, parts
   ooxml-xml/           @word-kit/ooxml-xml    # 名前空間つき XML パーサ/シリアライザ
   ast/                 @word-kit/ast          # Raw + Semantic AST 型と traversal
@@ -527,7 +527,7 @@ Word は SDK 拡張用に `mc:AlternateContent` を活用する。
 ## 9. 公開 API スケッチ
 
 ```ts
-import { Docx } from "@word-kit/core";
+import { Docx } from "@office-kit/docx";
 
 // 1) 空から生成
 const doc = Docx.create({ pageSize: "A4", margins: "normal" });

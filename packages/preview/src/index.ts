@@ -1,6 +1,6 @@
 /**
- * `@word-kit/preview` — render a `.docx` produced (or opened) by
- * `@word-kit/core` into a browser DOM container so callers can show a
+ * `@office-kit/docx-preview` — render a `.docx` produced (or opened) by
+ * `@office-kit/docx` into a browser DOM container so callers can show a
  * read-only preview of the document next to a form / editor / pipeline
  * that produced it.
  *
@@ -13,7 +13,7 @@
  * `docs/PLAN-PREVIEW.md` in the monorepo for the design.
  */
 
-import { type Docx, toUint8Array } from "@word-kit/core";
+import { type Docx, toUint8Array } from "@office-kit/docx";
 
 /**
  * Options accepted by {@link previewToDOM}. Names mirror the
@@ -64,7 +64,7 @@ export interface PreviewToDOMOptions {
  * detaches the renderer's CSS, removes the rendered DOM nodes from the
  * container, and releases internal references.
  *
- * @remarks Plain data shape — no class. Matches `@word-kit/core`'s
+ * @remarks Plain data shape — no class. Matches `@office-kit/docx`'s
  * function-API posture.
  */
 export interface Handle {
@@ -97,8 +97,8 @@ const DEFAULT_OPTIONS = {
  *
  * @example
  * ```ts
- * import { openDocx } from "@word-kit/core";
- * import { previewToDOM } from "@word-kit/preview";
+ * import { openDocx } from "@office-kit/docx";
+ * import { previewToDOM } from "@office-kit/docx-preview";
  *
  * const doc = openDocx(bytes);
  * const handle = await previewToDOM(doc, document.querySelector("#preview")!);
@@ -166,7 +166,7 @@ async function coerceToBytes(source: PreviewSource): Promise<Uint8Array> {
     return new Uint8Array(buf);
   }
   // Treat the remaining case as `Docx`. It's the function-API surface
-  // from `@word-kit/core` so we can reach `toUint8Array` without a
+  // from `@office-kit/docx` so we can reach `toUint8Array` without a
   // type assertion.
   return toUint8Array(source as Docx);
 }

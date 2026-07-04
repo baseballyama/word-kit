@@ -1,7 +1,7 @@
-# @word-kit/preview
+# @office-kit/docx-preview
 
 Browser-side read-only preview for `.docx` documents produced (or
-opened) by [`@word-kit/core`](../core).
+opened) by [`@office-kit/docx`](../..).
 
 ## Status
 
@@ -20,18 +20,18 @@ peer-dep promptly.
 ## Install
 
 ```bash
-npm install @word-kit/core @word-kit/preview
-# or: pnpm add @word-kit/core @word-kit/preview
+npm install @office-kit/docx @office-kit/docx-preview
+# or: pnpm add @office-kit/docx @office-kit/docx-preview
 ```
 
-`@word-kit/preview` declares `@word-kit/core` and `docx-preview` as
+`@office-kit/docx-preview` declares `@office-kit/docx` and `docx-preview` as
 runtime dependencies. Both are ESM-only.
 
 ## Usage
 
 ```ts
-import { openDocx } from "@word-kit/core";
-import { previewToDOM } from "@word-kit/preview";
+import { openDocx } from "@office-kit/docx";
+import { previewToDOM } from "@office-kit/docx-preview";
 
 const bytes = /* Uint8Array | Blob | ArrayBuffer */;
 const doc = openDocx(bytes);
@@ -56,7 +56,7 @@ handle.dispose();
 `previewToDOM` accepts:
 
 - a `Docx` value returned by `createDocx` / `openDocx` /
-  `clone` / `fromBlob` from `@word-kit/core`, **or**
+  `clone` / `fromBlob` from `@office-kit/docx`, **or**
 - raw bytes — `Uint8Array`, `Blob`, or `ArrayBuffer`.
 
 It returns a `Handle` with a single `dispose()` method that detaches

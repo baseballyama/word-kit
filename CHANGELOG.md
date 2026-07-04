@@ -36,23 +36,26 @@ this file is a hand-curated overview.
 
 ### Added
 
-- `@word-kit/opc` — Open Packaging Conventions reader/writer with byte-stable
-  round-trip for untouched parts. Built on `fflate`. Plain-data API
-  (`OpcPackage` interface + `readOpcPackage`, `writeOpcPackage`,
-  `addPart`, `getPart`, `allRelationships`, `packageRelationships`, …).
-- `@word-kit/ooxml-xml` — namespace-aware XML parser/serializer that preserves
-  attribute order, prefixes, `xml:space="preserve"`, CDATA, comments, and PIs.
-- `@word-kit/wml` — WordprocessingML AST plus parsers, writers, and builders
-  for paragraphs, runs, tables, styles, numbering, headers/footers, sections,
-  comments, footnotes/endnotes, hyperlinks, fields, and document properties.
-- `@word-kit/core` — the public `Docx` interface and standalone-function API
-  wrapping the lower packages.
-- `@word-kit/preview` — browser-side read-only preview. Single function entry,
+- `@office-kit/docx` — the public `Docx` interface and standalone-function API.
+  Ships as a single self-contained package; the layers below are bundled in
+  (`src/internal/`), not published separately:
+  - **OPC layer** (`src/internal/opc`) — Open Packaging Conventions
+    reader/writer with byte-stable round-trip for untouched parts, built on
+    `fflate` (`OpcPackage` interface + `readOpcPackage`, `writeOpcPackage`,
+    `addPart`, `getPart`, `allRelationships`, `packageRelationships`, …).
+  - **XML layer** (`src/internal/xml`) — namespace-aware XML parser/serializer
+    that preserves attribute order, prefixes, `xml:space="preserve"`, CDATA,
+    comments, and PIs.
+  - **WordprocessingML layer** (`src/internal/wordprocessingml`) — WML AST plus
+    parsers, writers, and builders for paragraphs, runs, tables, styles,
+    numbering, headers/footers, sections, comments, footnotes/endnotes,
+    hyperlinks, fields, and document properties.
+- `@office-kit/docx-preview` — browser-side read-only preview. Single function entry,
   `previewToDOM(source, container, options?) → Promise<Handle>`. v0
   implementation wraps the OSS `docx-preview` (Apache-2.0). The wrap is
   intentional and final; see `docs/PLAN-PREVIEW.md` for the rationale.
 
-#### Authoring (function API on `@word-kit/core`)
+#### Authoring (function API on `@office-kit/docx`)
 
 - Lifecycle: `createDocx({ paragraphs? })`, `openDocx(bytes)`,
   `fromBlob(blob)`, `toUint8Array(doc)`, `toBlob(doc)`, `clone(doc)`.
@@ -92,7 +95,7 @@ this file is a hand-curated overview.
 - Diagnostics: `validate(doc)`, `statistics(doc)`, `outline(doc)`,
   `fields(doc)`.
 
-#### Browser preview (function API on `@word-kit/preview`)
+#### Browser preview (function API on `@office-kit/docx-preview`)
 
 - `previewToDOM(source, container, options?)` renders a `Docx`,
   `Uint8Array`, `Blob`, or `ArrayBuffer` into a DOM container.

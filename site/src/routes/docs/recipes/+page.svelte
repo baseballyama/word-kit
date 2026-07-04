@@ -28,7 +28,7 @@
   <p class="lede">
     Every snippet below lives under <code>site/src/lib/examples/</code> and is
     type-checked by <code>svelte-check</code> against the live
-    <code>@word-kit/core</code> / <code>@word-kit/preview</code> surface. An API
+    <code>@office-kit/docx</code> / <code>@office-kit/docx-preview</code> surface. An API
     rename breaks this page before anything ships. Pointers under each snippet
     name the matching sample file produced by <code>pnpm sample</code> (or the
     integration test that exercises the same path).

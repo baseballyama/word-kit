@@ -12,21 +12,21 @@ export const prerender = true;
 
 const BODY = `# word-kit
 
-> OOXML-compliant (ECMA-376) Word \`.docx\` library. Reads, edits, and writes WordprocessingML in both Node 22+ and modern browsers. Lossless round-trip for every element the library doesn't yet model (so hand-designed templates survive intact). Function-first API: every operation is a standalone, tree-shakeable export. Optional companion \`@word-kit/preview\` mounts a read-only render of any \`Docx\` into a DOM container.
+> OOXML-compliant (ECMA-376) Word \`.docx\` library. Reads, edits, and writes WordprocessingML in both Node 22+ and modern browsers. Lossless round-trip for every element the library doesn't yet model (so hand-designed templates survive intact). Function-first API: every operation is a standalone, tree-shakeable export. Optional companion \`@office-kit/docx-preview\` mounts a read-only render of any \`Docx\` into a DOM container.
 
 This file is a short index. For every page concatenated into a single Markdown document — usable as a one-fetch LLM payload — see [\`/llms-full.txt\`](./llms-full.txt).
 
 ## Packages
 
-- [\`@word-kit/core\`](./api) — the public authoring API. \`Docx\` is a plain interface; every operation is a standalone function. Minimal slice (\`createDocx + appendParagraph + toUint8Array\`) bundles to ~42 KB minified; full surface ~131 KB.
-- [\`@word-kit/preview\`](./api) — browser-side read-only preview. Single function entry \`previewToDOM(source, container, options?)\`. Wraps the OSS \`docx-preview\` renderer; wrap is intentional and final.
+- [\`@office-kit/docx\`](./api) — the public authoring API. \`Docx\` is a plain interface; every operation is a standalone function. Minimal slice (\`createDocx + appendParagraph + toUint8Array\`) bundles to ~42 KB minified; full surface ~131 KB.
+- [\`@office-kit/docx-preview\`](./api) — browser-side read-only preview. Single function entry \`previewToDOM(source, container, options?)\`. Wraps the OSS \`docx-preview\` renderer; wrap is intentional and final.
 
 ## Docs
 
 - [Getting started](./docs/getting-started) — install, build a doc from scratch, open and fill a template, embed the preview.
 - [Recipes](./docs/recipes) — type-checked snippets for mail-merge, PowerPoint-style designed bases, image replacement, fields/TOC, tracked changes, and the browser embed.
 - [API reference](./api) — every public export grouped by area: lifecycle, paragraphs & blocks, inline & text, styles & numbering, tables, images, headers/footers/sections, comments/notes/hyperlinks/bookmarks, fields & tracked changes, document properties, diagnostics, browser preview.
-- [Playground](./playground) — drop a \`.docx\` (or generate a built-in sample) and see it rendered live by \`@word-kit/preview\`. The bytes never leave the page.
+- [Playground](./playground) — drop a \`.docx\` (or generate a built-in sample) and see it rendered live by \`@office-kit/docx-preview\`. The bytes never leave the page.
 
 ## Scope
 

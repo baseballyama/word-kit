@@ -8,8 +8,8 @@
   let fileName = $state<string>('built-in sample');
   let docxBytes = $state<number>(0);
   let dropping = $state<boolean>(false);
-  let docxModule = $state<typeof import('@word-kit/core') | null>(null);
-  let previewModule = $state<typeof import('@word-kit/preview') | null>(null);
+  let docxModule = $state<typeof import('@office-kit/docx') | null>(null);
+  let previewModule = $state<typeof import('@office-kit/docx-preview') | null>(null);
   // The actual bytes currently mounted in the preview, kept so that the
   // download button can return the same .docx the user is looking at —
   // whether that's the built-in sample or a file they just uploaded.
@@ -17,21 +17,21 @@
   let currentDispose: (() => void) | null = null;
 
   async function ensureModules(): Promise<{
-    core: typeof import('@word-kit/core');
-    preview: typeof import('@word-kit/preview');
+    core: typeof import('@office-kit/docx');
+    preview: typeof import('@office-kit/docx-preview');
   }> {
     if (docxModule && previewModule) return { core: docxModule, preview: previewModule };
-    status = 'Loading @word-kit/core + @word-kit/preview…';
+    status = 'Loading @office-kit/docx + @office-kit/docx-preview…';
     const [coreMod, previewMod] = await Promise.all([
-      import('@word-kit/core'),
-      import('@word-kit/preview'),
+      import('@office-kit/docx'),
+      import('@office-kit/docx-preview'),
     ]);
     docxModule = coreMod;
     previewModule = previewMod;
     return { core: coreMod, preview: previewMod };
   }
 
-  function buildSampleBytes(core: typeof import('@word-kit/core')): Uint8Array {
+  function buildSampleBytes(core: typeof import('@office-kit/docx')): Uint8Array {
     const {
       addBulletList,
       addTable,
@@ -52,13 +52,13 @@
     setCoreProperties(doc, {
       title: 'word-kit playground sample',
       creator: 'word-kit',
-      description: 'Built in the browser by @word-kit/core, rendered by @word-kit/preview.',
+      description: 'Built in the browser by @office-kit/docx, rendered by @office-kit/docx-preview.',
     });
 
     appendHeading(doc, 'word-kit — playground sample', 1);
     appendParagraph(
       doc,
-      'This document was generated entirely in the browser by @word-kit/core, then mounted into the page by @word-kit/preview. No server, no Word, no PDF.',
+      'This document was generated entirely in the browser by @office-kit/docx, then mounted into the page by @office-kit/docx-preview. No server, no Word, no PDF.',
     );
 
     appendHeading(doc, 'What you can do here', 2);
@@ -183,8 +183,8 @@
     <h1>Render a <em>.docx</em> in your browser.</h1>
     <p class="lede">
       Drop a Word document onto the canvas, or generate a built-in sample with
-      <code>@word-kit/core</code>. Preview is rendered by
-      <a href="{base}/api">@word-kit/preview</a> entirely client-side — your file never
+      <code>@office-kit/docx</code>. Preview is rendered by
+      <a href="{base}/api">@office-kit/docx-preview</a> entirely client-side — your file never
       leaves the page.
     </p>
   </div>
@@ -231,12 +231,12 @@
       <strong>What is this?</strong>
       <br />
       A read-only render. To edit, build a <code>Docx</code> with
-      <code>@word-kit/core</code>; <em>Download current bytes</em> hands you back
+      <code>@office-kit/docx</code>; <em>Download current bytes</em> hands you back
       whatever <code>.docx</code> is mounted right now — sample or upload.
     </p>
 
     <p class="note muted">
-      Bundle: <code>@word-kit/core</code> ~131 KB full · <code>@word-kit/preview</code> wraps the OSS
+      Bundle: <code>@office-kit/docx</code> ~131 KB full · <code>@office-kit/docx-preview</code> wraps the OSS
       <code>docx-preview</code> renderer.
     </p>
   </aside>

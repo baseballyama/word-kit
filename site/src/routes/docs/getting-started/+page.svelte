@@ -23,10 +23,10 @@
 
   <h2>Install</h2>
 
-  <pre class="install"><span class="dollar">$</span> pnpm add @word-kit/core @word-kit/preview</pre>
+  <pre class="install"><span class="dollar">$</span> pnpm add @office-kit/docx @office-kit/docx-preview</pre>
 
   <p>
-    <code>@word-kit/core</code> is the authoring API. <code>@word-kit/preview</code> is an
+    <code>@office-kit/docx</code> is the authoring API. <code>@office-kit/docx-preview</code> is an
     optional companion that mounts a read-only preview of any <code>Docx</code> value into a DOM
     container. Both ship as ESM with bundled <code>.d.ts</code> types and have no Node-only
     dependencies.
@@ -36,7 +36,7 @@
 
   <p>
     The "hello world" of word-kit. Every helper here lives on
-    <code>@word-kit/core</code>; <code>createDocx</code> hands back a plain
+    <code>@office-kit/docx</code>; <code>createDocx</code> hands back a plain
     <code>Docx</code> object that the rest of the API treats as a value.
   </p>
 
@@ -71,7 +71,7 @@
   <h2>Render in the browser</h2>
 
   <p>
-    The companion package <code>@word-kit/preview</code> mounts a read-only preview of any
+    The companion package <code>@office-kit/docx-preview</code> mounts a read-only preview of any
     <code>Docx</code> (or raw bytes) into a DOM container. It wraps the OSS
     <code>docx-preview</code> renderer behind a stable function-API entry point.
   </p>

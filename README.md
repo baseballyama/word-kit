@@ -1,4 +1,4 @@
-# word-kit
+# @office-kit/docx
 
 OOXML-compliant (ECMA-376) **`.docx`** generation library. Runs in modern
 browsers and Node.js.
@@ -15,11 +15,11 @@ browsers and Node.js.
 ## Install
 
 ```bash
-pnpm add @word-kit/core
-# or: npm install @word-kit/core / yarn add @word-kit/core
+pnpm add @office-kit/docx
+# or: npm install @office-kit/docx / yarn add @office-kit/docx
 ```
 
-`@word-kit/core` ships ESM-only with bundled `.d.ts` types. It has no
+`@office-kit/docx` ships ESM-only with bundled `.d.ts` types. It has no
 Node-only dependencies and works in browsers (including with the `Blob` and
 `File` APIs).
 
@@ -36,7 +36,7 @@ import {
   replaceTextEverywhere,
   setPageSize,
   toUint8Array,
-} from "@word-kit/core";
+} from "@office-kit/docx";
 
 // From scratch
 const doc = createDocx({ paragraphs: ["Hello, world."] });
@@ -60,18 +60,18 @@ const out = toUint8Array(tpl);
 > A minimal `createDocx + appendParagraph + toUint8Array` slice bundles to
 > ~42 KB minified; the full surface is ~131 KB. CI enforces both numbers.
 
-See [`packages/core/README.md`](./packages/core/README.md) for the full API
+See [`docs/examples.md`](./docs/examples.md) for the full API
 walkthrough (images, comments, footnotes, headers/footers, bookmarks,
 hyperlinks, tracked changes, core document properties).
 
 ## Browser preview
 
-Pair `@word-kit/core` with [`@word-kit/preview`](./packages/preview/README.md)
+Pair `@office-kit/docx` with [`@office-kit/docx-preview`](./packages/preview/README.md)
 to render any `Docx` value as a read-only DOM tree:
 
 ```ts
-import { openDocx } from "@word-kit/core";
-import { previewToDOM } from "@word-kit/preview";
+import { openDocx } from "@office-kit/docx";
+import { previewToDOM } from "@office-kit/docx-preview";
 
 const doc = openDocx(bytes);
 const handle = await previewToDOM(doc, document.getElementById("preview")!);
@@ -79,7 +79,7 @@ const handle = await previewToDOM(doc, document.getElementById("preview")!);
 handle.dispose();
 ```
 
-`@word-kit/preview` wraps the OSS [`docx-preview`](https://github.com/VolodymyrBaydalka/docxjs)
+`@office-kit/docx-preview` wraps the OSS [`docx-preview`](https://github.com/VolodymyrBaydalka/docxjs)
 renderer behind a stable function-API entry point. The wrap is intentional and
 final — see [`docs/PLAN-PREVIEW.md`](./docs/PLAN-PREVIEW.md) for the rationale.
 
@@ -89,7 +89,7 @@ final — see [`docs/PLAN-PREVIEW.md`](./docs/PLAN-PREVIEW.md) for the rationale
 
 - WordprocessingML (`.docx`) — read, edit, write.
 - OPC packaging (ECMA-376 Part 2), DrawingML — as the underlying layers.
-- **Browser preview** — `@word-kit/preview` wraps `docx-preview` so callers can
+- **Browser preview** — `@office-kit/docx-preview` wraps `docx-preview` so callers can
   render docx content into a DOM container without spinning up a server.
 
 **Out of scope (for now)**
@@ -107,16 +107,19 @@ a more appropriate library. See [`CLAUDE.md`](./CLAUDE.md) ("Scope discipline").
 
 ```
 .
+├── src/                       # @office-kit/docx — the published library
+│   ├── index.ts               # public entry (re-exports src/api)
+│   ├── api/                   # public Docx wrapper (docx / validator / version)
+│   └── internal/              # bundled layers — not separate npm packages
+│       ├── opc/               # OPC (ZIP + Content Types + rels)
+│       ├── xml/               # namespace-aware XML parser/serializer
+│       └── wordprocessingml/  # WML AST + parsers + builders
 ├── packages/
-│   ├── core/                  # @word-kit/core      — public Docx wrapper
-│   ├── preview/               # @word-kit/preview   — browser preview (wraps docx-preview)
-│   ├── opc/                   # @word-kit/opc       — OPC (ZIP + Content Types + rels)
-│   ├── ooxml-xml/             # @word-kit/ooxml-xml — namespace-aware XML parser/serializer
-│   └── wordprocessingml/      # @word-kit/wml       — WML AST + parsers + builders
+│   └── preview/               # @office-kit/docx-preview — browser preview (wraps docx-preview)
 ├── site/                      # SvelteKit docs site (pagefind search + preview playground)
 ├── docs/
 │   ├── specs/                 # Distilled spec notes + ECMA-376 fetcher target
-│   └── PLAN-PREVIEW.md        # Why @word-kit/preview wraps docx-preview, final
+│   └── PLAN-PREVIEW.md        # Why @office-kit/docx-preview wraps docx-preview, final
 ├── references/                # External OSS / spec material (submodules)
 ├── scripts/
 │   ├── fetch-specs.sh         # Downloads ECMA-376 PDFs + XSDs into docs/specs/
@@ -137,13 +140,14 @@ a more appropriate library. See [`CLAUDE.md`](./CLAUDE.md) ("Scope discipline").
 
 ```bash
 pnpm install           # one-time setup (use --recurse-submodules for fixture corpora)
-pnpm typecheck         # tsc --noEmit across all packages
+pnpm -r run typecheck  # tsc --noEmit (library + preview)
 pnpm lint              # oxlint
 pnpm format:check      # oxfmt --check
-pnpm build             # tsdown (rolldown), all packages
-pnpm test              # builds first via `pretest`, then runs vitest (512 tests)
+pnpm build             # tsdown (rolldown) — builds the @office-kit/docx library
+pnpm build:all         # build every workspace package (library, preview, site)
+pnpm test              # vitest (source-resolved, no build step needed)
 pnpm check:tree-shake  # CI bundle-budget gate (~42 KB minimal vs ~131 KB full)
-pnpm sample            # writes 32 demonstration .docx files into ./samples/
+pnpm sample            # writes demonstration .docx files into ./samples/
 ```
 
 For the docs site:

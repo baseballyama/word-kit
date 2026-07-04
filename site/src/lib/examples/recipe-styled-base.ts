@@ -11,7 +11,7 @@ import {
   mergeStylesFromTemplate,
   setParagraphStyle,
   toUint8Array,
-} from "@word-kit/core";
+} from "@office-kit/docx";
 
 declare const templateBytes: Uint8Array;
 

@@ -11,7 +11,7 @@ import {
   PAGE_SIZE_A4,
   setPageSize,
   toUint8Array,
-} from "@word-kit/core";
+} from "@office-kit/docx";
 
 const doc = createDocx({ paragraphs: [] });
 setPageSize(doc, PAGE_SIZE_A4);

@@ -5,7 +5,9 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "src/**"
       - "packages/**"
+      - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/deploy-site.yml"
@@ -36,10 +38,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Site depends on @word-kit/core and @word-kit/preview via workspace:*
-      # resolutions to packages/*/dist/index.mjs. Build those first.
+      # Site depends on @office-kit/docx (root) and @office-kit/docx-preview
+      # via workspace:* resolutions to their built dist/index.mjs. Build those
+      # two first (not the site itself — that runs below with BASE_PATH set).
       - name: Build packages
-        run: pnpm build
+        run: pnpm --filter "@office-kit/docx" --filter "@office-kit/docx-preview" run build
 
       - name: Type-check site
         run: pnpm --filter word-kit-site check

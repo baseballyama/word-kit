@@ -37,14 +37,15 @@ coverage.
 
 | Command                 | What it does                                                                 |
 | ----------------------- | ---------------------------------------------------------------------------- |
-| `pnpm typecheck`        | Run `tsc --noEmit` across every package with the strict settings.            |
+| `pnpm -r run typecheck` | Run `tsc --noEmit` across the library + preview with the strict settings.    |
 | `pnpm lint`             | Run `oxlint`.                                                                |
 | `pnpm format`           | Run `oxfmt` (writes). `pnpm format:check` validates without writing.         |
-| `pnpm build`            | Bundle every package with `tsdown` (rolldown). Output lands in `*/dist/`.    |
-| `pnpm test`             | Build first (via the `pretest` hook) then run vitest — 512 tests, < 20 s.    |
+| `pnpm build`            | Bundle the `@office-kit/docx` library with `tsdown` (rolldown) into `dist/`. |
+| `pnpm build:all`        | Build every workspace package (library, preview, site).                      |
+| `pnpm test`             | Run vitest — 460 tests, < 20 s. No build step needed (source-resolved).      |
 | `pnpm test:watch`       | Same in watch mode.                                                          |
 | `pnpm check:tree-shake` | Build the minimal entry and budget it against the full surface (~42/131 KB). |
-| `pnpm sample`           | Write 32 demonstration `.docx` files into `./samples/` for inspection.       |
+| `pnpm sample`           | Write demonstration `.docx` files into `./samples/` for inspection.          |
 | `pnpm changeset`        | Add a changeset describing your change (drives release notes + versioning).  |
 
 CI mirrors the same gate: format check + lint + build + typecheck +
@@ -60,9 +61,9 @@ locally before opening a PR to catch most failures up front.
    branch makes review and reverts straightforward.
 3. **Write a test.** Bug fixes should add a regression test; features
    should ship with unit + integration coverage. The test files live next
-   to their source under `packages/<pkg>/src/`.
-4. **Run the full gate locally.** `pnpm format:check && pnpm lint && pnpm
-typecheck && pnpm test && pnpm check:tree-shake` is what CI runs.
+   to their source under `src/` (and `packages/preview/src/`).
+4. **Run the full gate locally.** `pnpm format:check && pnpm lint && pnpm -r
+run typecheck && pnpm test && pnpm check:tree-shake` is what CI runs.
 5. **Add a changeset.** word-kit uses
    [Changesets](https://github.com/changesets/changesets) for release notes
    and version bumps. Run `pnpm changeset` and pick `patch` for fixes,
@@ -102,13 +103,13 @@ locally without flagging it in the PR description.
 
 ## Tests
 
-- **Unit and integration tests** live next to the code under
-  `packages/<pkg>/src/`. The file naming is `<thing>.test.ts`.
+- **Unit and integration tests** live next to the code under `src/`
+  (and `packages/preview/src/`). The file naming is `<thing>.test.ts`.
 - **Round-trip tests** load a fixture, save it, and assert the output is
   semantically equal to the input. They're how we keep parity with Word /
   LibreOffice / mammoth.js / python-docx output. When you add support for
   a new OOXML element, add at least one round-trip fixture.
-- **Performance smoke tests** (`packages/core/src/perf-smoke.test.ts`)
+- **Performance smoke tests** (`src/api/perf-smoke.test.ts`)
   guard against accidental O(n²) regressions on common shapes (10k
   paragraphs, 100 tables, large find/replace). Budgets are loose so CI on
   slow runners doesn't false-fail.
@@ -120,24 +121,27 @@ guards (see commit `8039586` for the history).
 
 ## Packages
 
-word-kit ships as a small set of layered packages, all under
-`packages/`:
+`@office-kit/docx` ships as a single self-contained package built from
+layered modules. The public library lives at the repo root (`src/`); the
+lower layers are inlined under `src/internal/` and bundled in — they are
+**not** separate npm packages. The browser preview is the only other
+published package, under `packages/preview`.
 
-| Package               | What it owns                                                       |
-| --------------------- | ------------------------------------------------------------------ |
-| `@word-kit/core`      | The public `Docx` interface + the function API users import.       |
-| `@word-kit/wml`       | WordprocessingML AST: parsers, writers, builders.                  |
-| `@word-kit/ooxml-xml` | Namespace-aware XML parser / serializer with round-trip fidelity.  |
-| `@word-kit/opc`       | OPC packaging (ZIP + content types + rels) with byte-stable parts. |
-| `@word-kit/preview`   | Browser-side read-only preview (wraps `docx-preview`).             |
+| Location                                        | What it owns                                                       |
+| ----------------------------------------------- | ------------------------------------------------------------------ |
+| `src/api` (`@office-kit/docx`)                  | The public `Docx` interface + the function API users import.       |
+| `src/internal/wordprocessingml`                 | WordprocessingML AST: parsers, writers, builders.                  |
+| `src/internal/xml`                              | Namespace-aware XML parser / serializer with round-trip fidelity.  |
+| `src/internal/opc`                              | OPC packaging (ZIP + content types + rels) with byte-stable parts. |
+| `packages/preview` (`@office-kit/docx-preview`) | Browser-side read-only preview (wraps `docx-preview`).             |
 
-Most contributions touch `@word-kit/core` or `@word-kit/wml`; the lower
-two layers (`ooxml-xml`, `opc`) are stable and only get changes when the
+Most contributions touch `src/api` or `src/internal/wordprocessingml`; the
+lower two layers (`xml`, `opc`) are stable and only get changes when the
 schema below them moves.
 
 The browser preview is **intentionally** a thin wrap over
 [`docx-preview`](https://github.com/VolodymyrBaydalka/docxjs). Don't
-propose re-implementing the renderer in `@word-kit/preview` — see
+propose re-implementing the renderer in `@office-kit/docx-preview` — see
 [`docs/PLAN-PREVIEW.md`](docs/PLAN-PREVIEW.md) for the rationale.
 
 ## Releases

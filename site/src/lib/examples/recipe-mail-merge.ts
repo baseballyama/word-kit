@@ -4,7 +4,7 @@
 // whole document, so a {{name}} hidden in a header is filled the same
 // way one in the body is.
 
-import { openDocx, replaceTextEverywhere, toUint8Array } from "@word-kit/core";
+import { openDocx, replaceTextEverywhere, toUint8Array } from "@office-kit/docx";
 
 declare const templateBytes: Uint8Array;
 declare const values: Record<string, string>;

@@ -1,11 +1,50 @@
 {
-  "name": "word-kit-monorepo",
-  "private": true,
+  "name": "@office-kit/docx",
+  "version": "0.0.0",
+  "description": "OOXML-compliant .docx generation for browser and Node.js.",
+  "keywords": [
+    "docx",
+    "ecma-376",
+    "ooxml",
+    "word",
+    "wordprocessingml"
+  ],
+  "homepage": "https://github.com/baseballyama/word-kit#readme",
+  "bugs": {
+    "url": "https://github.com/baseballyama/word-kit/issues"
+  },
+  "license": "MIT",
+  "author": "Yuichiro Yamashita",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baseballyama/word-kit.git"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
-    "build": "pnpm -r --filter \"./packages/*\" run build",
-    "typecheck": "pnpm -r --filter \"./packages/*\" run typecheck",
-    "pretest": "pnpm build",
+    "build": "tsdown",
+    "build:all": "pnpm -r run build",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:tree-shake": "node scripts/check-tree-shake.mjs",
@@ -15,7 +54,11 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "changeset": "changeset",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm --filter \"@office-kit/docx\" --filter \"@office-kit/docx-preview\" run build && changeset publish",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.0",

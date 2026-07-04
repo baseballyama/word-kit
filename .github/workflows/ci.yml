@@ -47,19 +47,19 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      # Build before typecheck: every package consumes its siblings via
-      # workspace dependencies whose `.d.mts` files live under `dist/`.
-      # Running `tsc` against an un-built workspace fails to resolve
-      # `@word-kit/ooxml-xml` and friends, even though every individual
-      # package is locally consistent.
+      # Build the library before typecheck: the preview package consumes
+      # `@office-kit/docx` via a workspace dependency whose `.d.mts` types
+      # live under the root `dist/`. Running `tsc` against an un-built root
+      # fails to resolve `@office-kit/docx`, even though each package is
+      # locally consistent.
       - name: Build
         run: pnpm build
 
       - name: Type check
-        run: pnpm typecheck
+        run: pnpm -r run typecheck
 
       - name: Tree-shake budget
-        # Verifies @word-kit/core can be tree-shaken: a minimal entry
+        # Verifies @office-kit/docx can be tree-shaken: a minimal entry
         # (createDocx + appendParagraph + toUint8Array) stays under a hard
         # bundle-size budget AND doesn't carry strings from feature areas it
         # doesn't import. Regressions like reintroducing a class would make
@@ -68,7 +68,7 @@ jobs:
 
       - name: Docs API-page coverage
         # Asserts site/src/routes/api/+page.svelte lists every named export
-        # from @word-kit/core (and only those — no ghost names left behind
+        # from @office-kit/docx (and only those — no ghost names left behind
         # from renames). Catches "I added a function but forgot to put it
         # on the docs site" and the inverse.
         run: pnpm check:api-page

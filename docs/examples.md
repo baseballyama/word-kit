@@ -1,7 +1,7 @@
 # word-kit usage examples
 
 Concrete patterns for common workflows. Every snippet imports standalone
-functions from `@word-kit/core` — there is no `Docx` class to instantiate;
+functions from `@office-kit/docx` — there is no `Docx` class to instantiate;
 `Docx` is just the (data) type returned by `createDocx` / `openDocx`.
 This shape is what lets the bundler tree-shake any function you don't import.
 
@@ -41,7 +41,7 @@ import {
   setCoreProperties,
   setPageSize,
   toUint8Array,
-} from "@word-kit/core";
+} from "@office-kit/docx";
 import { writeFileSync } from "node:fs";
 
 const doc = createDocx({ paragraphs: [] });
@@ -80,7 +80,7 @@ optional cover page) and just author fresh content into it. The
 template carries no `{{placeholder}}` text — its job is the design.
 
 ```ts
-import { addBulletList, appendParagraph, openDocx, toUint8Array } from "@word-kit/core";
+import { addBulletList, appendParagraph, openDocx, toUint8Array } from "@office-kit/docx";
 import { readFileSync, writeFileSync } from "node:fs";
 
 // Designed by hand in Word and saved as report-template.docx. The file
@@ -119,7 +119,7 @@ holes**, and you fill the holes. Use this when the same skeleton goes
 out to many recipients with only a few values changing.
 
 ```ts
-import { openDocx, replaceTextEverywhere, toUint8Array } from "@word-kit/core";
+import { openDocx, replaceTextEverywhere, toUint8Array } from "@office-kit/docx";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const tpl = openDocx(readFileSync("invoice-template.docx"));
@@ -151,7 +151,7 @@ import {
   replaceTextEverywhere,
   setCoreProperties,
   toUint8Array,
-} from "@word-kit/core";
+} from "@office-kit/docx";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const template = openDocx(readFileSync("template.docx"));
@@ -185,7 +185,7 @@ import {
   openDocx,
   outline,
   statistics,
-} from "@word-kit/core";
+} from "@office-kit/docx";
 
 const doc = openDocx(bytes);
 
@@ -217,7 +217,7 @@ for (const { partName, matches } of findTextEverywhere(doc, /\{\{\w+\}\}/g)) {
 ## 6. Accept / reject tracked changes
 
 ```ts
-import { acceptAllRevisions, openDocx, toUint8Array } from "@word-kit/core";
+import { acceptAllRevisions, openDocx, toUint8Array } from "@office-kit/docx";
 
 const doc = openDocx(reviewedBytes);
 
@@ -235,7 +235,7 @@ const cleanBytes = toUint8Array(doc);
 ## 7. Add an image, replace an image
 
 ```ts
-import { addImage, createDocx, images, openDocx, replaceImage } from "@word-kit/core";
+import { addImage, createDocx, images, openDocx, replaceImage } from "@office-kit/docx";
 import { readFileSync } from "node:fs";
 
 const doc = createDocx({ paragraphs: ["Logo:"] });
@@ -259,7 +259,7 @@ if (firstImage) {
 ## 8. Validate before saving
 
 ```ts
-import { validate } from "@word-kit/core";
+import { validate } from "@office-kit/docx";
 
 const doc = buildSomeDocument();
 const issues = validate(doc);
@@ -275,7 +275,7 @@ if (issues.some((i) => i.level === "error")) {
 ## 9. Browser: load via `<input type=file>` and save via `<a download>`
 
 ```ts
-import { fromBlob, replaceText, toBlob } from "@word-kit/core";
+import { fromBlob, replaceText, toBlob } from "@office-kit/docx";
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];

@@ -6,7 +6,7 @@
 // deleted ones. `rejectAllRevisions` does the reverse: keeps deletions
 // (= drops the suggested insertions) and restores deleted ranges.
 
-import { acceptAllRevisions, openDocx, rejectAllRevisions, toUint8Array } from "@word-kit/core";
+import { acceptAllRevisions, openDocx, rejectAllRevisions, toUint8Array } from "@office-kit/docx";
 
 declare const reviewedBytes: Uint8Array;
 

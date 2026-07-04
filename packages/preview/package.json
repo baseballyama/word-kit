@@ -1,5 +1,5 @@
 {
-  "name": "@word-kit/preview",
+  "name": "@office-kit/docx-preview",
   "version": "0.0.0",
   "description": "Browser preview for word-kit .docx documents.",
   "keywords": [
@@ -45,7 +45,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@word-kit/core": "workspace:*",
+    "@office-kit/docx": "workspace:*",
     "docx-preview": "^0.3.6",
     "fflate": "^0.8.2"
   },

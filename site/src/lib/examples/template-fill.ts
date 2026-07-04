@@ -3,7 +3,7 @@
 // also walks headers / footers / footnotes / textboxes — not just the
 // body — so {{name}} in a header swaps out too.
 
-import { openDocx, replaceTextEverywhere, toUint8Array } from "@word-kit/core";
+import { openDocx, replaceTextEverywhere, toUint8Array } from "@office-kit/docx";
 
 declare const templateBytes: Uint8Array;
 declare const values: Record<string, string>;

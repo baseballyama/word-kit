@@ -1,7 +1,7 @@
 // Registry of every example file. The ?raw imports give us the on-disk
 // source verbatim. The .ts files themselves are in the project's tsconfig
 // include path, so svelte-check type-checks them against the live
-// @word-kit/core / @word-kit/preview surface — an API rename breaks the
+// @office-kit/docx / @office-kit/docx-preview surface — an API rename breaks the
 // docs build before anything ships, even though the modules are never
 // evaluated at runtime.
 
@@ -39,7 +39,7 @@ export const examples = {
     source: templateFill,
   },
   previewEmbed: {
-    title: "Render in the browser with @word-kit/preview",
+    title: "Render in the browser with @office-kit/docx-preview",
     path: "site/src/lib/examples/preview-embed.ts",
     description:
       "previewToDOM mounts a read-only render of any Docx into a DOM container. Returns an idempotent dispose handle.",

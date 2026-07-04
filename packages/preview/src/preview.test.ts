@@ -8,7 +8,7 @@
 // happy-dom shares the global Uint8Array with the test realm, so
 // fflate produces correct output and docx-preview can parse it.
 
-import { appendParagraph, createDocx, toUint8Array, type Docx } from "@word-kit/core";
+import { appendParagraph, createDocx, toUint8Array, type Docx } from "@office-kit/docx";
 import { describe, expect, it } from "vitest";
 import { previewToDOM } from "./index.js";
 

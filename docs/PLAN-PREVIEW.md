@@ -3,7 +3,7 @@
 > **Status (2026-05-15 — final): SHIPPED at v0. v1 and v2 are not
 > planned.**
 >
-> The `@word-kit/preview` package now wraps `docx-preview` behind the
+> The `@office-kit/docx-preview` package now wraps `docx-preview` behind the
 > stable `previewToDOM(...)` function-API entry. That meets the user
 > requirement ("プレビューできれば OK") so the more ambitious v1/v2 phases
 > originally described below are explicitly dropped: implementing our
@@ -51,7 +51,7 @@ preview would need to render.
   preview output coexists with the host page's CSS.
 - ESM-only, no Node-only deps in the published bundle.
 - Tree-shake friendly — sits behind its own subpath import
-  (`@word-kit/preview`) so consumers who don't need preview pay zero
+  (`@office-kit/docx-preview`) so consumers who don't need preview pay zero
   bundle cost.
 
 ### Out of scope (v1)
@@ -135,14 +135,14 @@ public API stable across all three.
 
 ### Public API surface (stable across phases)
 
-A single new package: **`@word-kit/preview`**.
+A single new package: **`@office-kit/docx-preview`**.
 
 A single function entry — consistent with `word-kit`'s no-classes /
 function-API rule:
 
 ```ts
-import { previewToDOM } from "@word-kit/preview";
-import { openDocx } from "@word-kit/core";
+import { previewToDOM } from "@office-kit/docx-preview";
+import { openDocx } from "@office-kit/docx";
 
 const doc = openDocx(bytes);
 const handle = await previewToDOM(doc, document.getElementById("preview")!, {
@@ -168,16 +168,16 @@ similar in spirit to the `Docx` interface itself: `{ dispose(): void }`.
 
 ### Phase 0 — bridge (week 1)
 
-- New package `packages/preview` published as `@word-kit/preview`.
+- New package `packages/preview` published as `@office-kit/docx-preview`.
 - Implementation: thin adapter over `docx-preview`. Convert a
   `Docx` value to bytes via `toUint8Array(doc)`, then hand to
   `docx-preview.renderAsync`. (Yes, this re-parses the OOXML —
   that's what "bridge" means.)
 - Same single function `previewToDOM` is the entry point.
 - Tree-shake check: importing only `previewToDOM` should NOT pull
-  the rest of `@word-kit/core` into the bundle for a consumer who
-  also doesn't import `@word-kit/core` themselves. (Achievable
-  because `@word-kit/preview` only imports `toUint8Array` and
+  the rest of `@office-kit/docx` into the bundle for a consumer who
+  also doesn't import `@office-kit/docx` themselves. (Achievable
+  because `@office-kit/docx-preview` only imports `toUint8Array` and
   `openDocx` from core — both already proven to tree-shake.)
 - Documentation: clearly mark v0 as a stop-gap, no semver-1.0
   commitment to behaviour, swap planned for v1.
@@ -193,7 +193,7 @@ invisible to consumers.
 Architecture (mirrors `docx-preview`'s, but native to our types):
 
 ```
-@word-kit/preview
+@office-kit/docx-preview
 ├── src/
 │   ├── index.ts              ← previewToDOM (the only public export)
 │   ├── render-document.ts    ← walks WmlDocument.body
@@ -291,16 +291,16 @@ We never ship the conversion ourselves.
 
 ### Phase 0 — bridge
 
-| #   | Task                                                                                                                                            | Estimate | Notes                                                       |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------- | ---------- | --------------------------------------- |
-| 0.1 | Add `packages/preview` workspace package, `@word-kit/preview`, ESM-only, function-API.                                                          | 1h       | Mirrors the layout of the other 4 packages.                 |
-| 0.2 | Add `docx-preview` as a runtime dependency.                                                                                                     | 5min     | Apache-2.0; bundle-size impact disclosed in CHANGELOG.      |
-| 0.3 | Implement `previewToDOM(doc, container, options?)` as a thin wrapper around `docx-preview.renderAsync`.                                         | 4h       | Accept `Docx                                                | Uint8Array | Blob`; convert `Docx`via`toUint8Array`. |
-| 0.4 | Tree-shake budget: extend `pnpm check:tree-shake` so `import { previewToDOM } from "@word-kit/preview"` is bounded (e.g. ≤1.2MB minified gzip). | 2h       | Two budgets: minimal core, minimal core+preview.            |
-| 0.5 | Add `samples` walk that renders each `samples/*.docx` to a static HTML page under `samples/preview/` for human review.                          | 2h       | Uses jsdom in Node so the sample script is still pure node. |
-| 0.6 | Vitest integration test: `previewToDOM(createDocx({paragraphs:["hello"]}), container)` produces a DOM whose textContent contains "hello".       | 1h       | Uses jsdom test environment.                                |
-| 0.7 | Doc: `docs/preview.md` with the API + a "this is v0, the implementation will be replaced" footnote.                                             | 1h       |                                                             |
-| 0.8 | Changeset entry: feat(preview).                                                                                                                 | 5min     |                                                             |
+| #   | Task                                                                                                                                                   | Estimate | Notes                                                       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ----------------------------------------------------------- | ---------- | --------------------------------------- |
+| 0.1 | Add `packages/preview` workspace package, `@office-kit/docx-preview`, ESM-only, function-API.                                                          | 1h       | Mirrors the layout of the other 4 packages.                 |
+| 0.2 | Add `docx-preview` as a runtime dependency.                                                                                                            | 5min     | Apache-2.0; bundle-size impact disclosed in CHANGELOG.      |
+| 0.3 | Implement `previewToDOM(doc, container, options?)` as a thin wrapper around `docx-preview.renderAsync`.                                                | 4h       | Accept `Docx                                                | Uint8Array | Blob`; convert `Docx`via`toUint8Array`. |
+| 0.4 | Tree-shake budget: extend `pnpm check:tree-shake` so `import { previewToDOM } from "@office-kit/docx-preview"` is bounded (e.g. ≤1.2MB minified gzip). | 2h       | Two budgets: minimal core, minimal core+preview.            |
+| 0.5 | Add `samples` walk that renders each `samples/*.docx` to a static HTML page under `samples/preview/` for human review.                                 | 2h       | Uses jsdom in Node so the sample script is still pure node. |
+| 0.6 | Vitest integration test: `previewToDOM(createDocx({paragraphs:["hello"]}), container)` produces a DOM whose textContent contains "hello".              | 1h       | Uses jsdom test environment.                                |
+| 0.7 | Doc: `docs/preview.md` with the API + a "this is v0, the implementation will be replaced" footnote.                                                    | 1h       |                                                             |
+| 0.8 | Changeset entry: feat(preview).                                                                                                                        | 5min     |                                                             |
 
 ### Phase 1 — own the renderer
 
@@ -324,7 +324,7 @@ page-budget allocator → `DomPainter` → re-flow on content change.
 ## 6. Open questions (please decide before phase 0 starts)
 
 1. **Subpath vs separate package?** Plan above is a separate package
-   (`@word-kit/preview`). Subpath import (`@word-kit/core/preview`)
+   (`@office-kit/docx-preview`). Subpath import (`@office-kit/docx/preview`)
    is also viable but couples preview lifecycle to core. Separate
    package matches the existing OPC / WML / XML separation.
 
@@ -362,7 +362,7 @@ page-budget allocator → `DomPainter` → re-flow on content change.
 | Risk                                                                                         | Likelihood                                               | Impact                   | Mitigation                                                                                                                                                                              |
 | -------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | v1 native renderer takes longer than estimated.                                              | High (renderers always do)                               | Schedule slip            | Phase 0 ships first. v1 can be partial — replace areas that have parity-with-`docx-preview`, leave the rest delegated.                                                                  |
-| Bundle size balloons because we ship two parsers in v0.                                      | Certain in v0                                            | Tree-shake budget breach | Sit `@word-kit/preview` behind its own package so only consumers who import it pay the cost. CI budget checks both.                                                                     |
+| Bundle size balloons because we ship two parsers in v0.                                      | Certain in v0                                            | Tree-shake budget breach | Sit `@office-kit/docx-preview` behind its own package so only consumers who import it pay the cost. CI budget checks both.                                                              |
 | `docx-preview` upstream breaks our wrapper.                                                  | Low                                                      | Schedule slip            | Pin major version. Wrapper is shallow; backports are cheap.                                                                                                                             |
 | v1 visual diff against `docx-preview` shows we render _worse_ on some fixtures.              | Likely on long-tail features (tab stops, complex tables) | Perception               | Document each known difference explicitly in `docs/preview.md`. We're allowed to be different where `docx-preview` is wrong; we are not allowed to be silently different.               |
 | HTML/CSS cannot reproduce some Word page semantics (well-known limitation, see TextControl). | Certain                                                  | Some fixtures look "off" | Out of scope for v1. Goal is "looks like a Word doc", not "byte-identical to Word's renderer".                                                                                          |
@@ -379,7 +379,7 @@ A "we shipped v1" acceptance set:
   the title in `AcmeTitle`'s bold dark-blue 22pt look, proving
   style resolution from `styles.xml` works.
 - Tree-shake budget for a consumer that imports only
-  `previewToDOM` (no other `@word-kit/core` symbols) stays under
+  `previewToDOM` (no other `@office-kit/docx` symbols) stays under
   600 KB minified, ungzipped (estimate; tighten after first build).
 - Suite passes 100% in CI across Node 20 / 22 / 24, and the new
   jsdom-based render tests pass.

@@ -1,10 +1,10 @@
 // Render any Docx — built from scratch or opened from bytes — into a
-// DOM container using @word-kit/preview. The wrap is intentional: we
+// DOM container using @office-kit/docx-preview. The wrap is intentional: we
 // share the renderer with docx-preview upstream but pin the contract
 // behind word-kit's stable function-API surface.
 
-import { openDocx } from "@word-kit/core";
-import { previewToDOM } from "@word-kit/preview";
+import { openDocx } from "@office-kit/docx";
+import { previewToDOM } from "@office-kit/docx-preview";
 
 declare const bytes: Uint8Array;
 declare const container: HTMLElement;

@@ -5,7 +5,7 @@
 
   const { data }: PageProps = $props();
 
-  const INSTALL_CMD = 'pnpm add @word-kit/core @word-kit/preview';
+  const INSTALL_CMD = 'pnpm add @office-kit/docx @office-kit/docx-preview';
   let installCopied = $state(false);
   let installResetTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -36,7 +36,7 @@
     {
       num: '03',
       title: 'Browser preview, no server',
-      body: '@word-kit/preview wraps the OSS docx-preview renderer behind a single function: previewToDOM(source, container). Drop any Docx, Uint8Array, Blob, or ArrayBuffer into a DOM node.',
+      body: '@office-kit/docx-preview wraps the OSS docx-preview renderer behind a single function: previewToDOM(source, container). Drop any Docx, Uint8Array, Blob, or ArrayBuffer into a DOM node.',
     },
     {
       num: '04',

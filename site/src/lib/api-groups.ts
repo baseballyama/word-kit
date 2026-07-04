@@ -5,8 +5,8 @@
 //   - `/llms-full.txt` — flattens the same groups into the API section
 //     of the LLM-readable concatenation.
 //   - `scripts/check-api-page.mjs` — diffs the entries here against the
-//     live `@word-kit/core` exports (plus a `previewToDOM` whitelist for
-//     `@word-kit/preview`). CI fails if a new export isn't added here.
+//     live `@office-kit/docx` exports (plus a `previewToDOM` whitelist for
+//     `@office-kit/docx-preview`). CI fails if a new export isn't added here.
 
 export type ApiEntry = { name: string; sig?: string };
 export type ApiGroup = { num: string; title: string; entries: ApiEntry[] };
@@ -212,7 +212,7 @@ export const apiGroups: ApiGroup[] = [
   },
   {
     num: "14",
-    title: "Browser preview (@word-kit/preview)",
+    title: "Browser preview (@office-kit/docx-preview)",
     entries: [{ name: "previewToDOM", sig: "(source, container, options?) => Promise<Handle>" }],
   },
 ];

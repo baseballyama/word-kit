@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Tree-shake budget check. Bundles a tiny entry that imports a small slice
-// of @word-kit/core and verifies that:
+// of @office-kit/docx and verifies that:
 //
 //   1. The minified bundle size stays under MIN_BUDGET. If we ever add code
 //      that the bundler can't drop, this catches it.
@@ -18,19 +18,20 @@
 
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
-// Resolve workspace package imports as a sibling of @word-kit/core would.
-const RESOLVE_DIR = join(ROOT, "packages", "core");
+// Measure tree-shaking against the built package entry — the exact artefact
+// consumers import as `@office-kit/docx`.
+const PACKAGE_ENTRY = resolve(ROOT, "dist", "index.mjs");
 
 async function bundleSize(entry) {
   const out = await build({
     stdin: {
       contents: entry,
       loader: "js",
-      resolveDir: RESOLVE_DIR,
+      resolveDir: ROOT,
       sourcefile: "treeshake-entry.mjs",
     },
     bundle: true,
@@ -43,19 +44,20 @@ async function bundleSize(entry) {
     conditions: ["import"],
     treeShaking: true,
     absWorkingDir: ROOT,
+    alias: { "@office-kit/docx": PACKAGE_ENTRY },
   });
   return out.outputFiles[0].text;
 }
 
 const minimalEntry = `
-import { createDocx, appendParagraph, toUint8Array } from "@word-kit/core";
+import { createDocx, appendParagraph, toUint8Array } from "@office-kit/docx";
 const d = createDocx();
 appendParagraph(d, "hello");
 globalThis.__bytes = toUint8Array(d);
 `;
 
 const fullEntry = `
-import * as everything from "@word-kit/core";
+import * as everything from "@office-kit/docx";
 globalThis.__exports = Object.keys(everything);
 `;
 

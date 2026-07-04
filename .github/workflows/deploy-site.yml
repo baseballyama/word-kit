@@ -41,8 +41,10 @@ jobs:
       # Site depends on @office-kit/docx (root) and @office-kit/docx-preview
       # via workspace:* resolutions to their built dist/index.mjs. Build those
       # two first (not the site itself — that runs below with BASE_PATH set).
+      # `pnpm build` is required for the root package: `pnpm --filter` and
+      # `pnpm -r` both skip the workspace-root project.
       - name: Build packages
-        run: pnpm --filter "@office-kit/docx" --filter "@office-kit/docx-preview" run build
+        run: pnpm build:packages
 
       - name: Type-check site
         run: pnpm --filter word-kit-site check

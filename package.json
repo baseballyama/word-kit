@@ -43,7 +43,8 @@
   },
   "scripts": {
     "build": "tsdown",
-    "build:all": "pnpm -r run build",
+    "build:packages": "pnpm build && pnpm --filter \"@office-kit/docx-preview\" run build",
+    "build:all": "pnpm build:packages && pnpm --filter word-kit-site run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -54,7 +55,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "changeset": "changeset",
-    "release": "pnpm --filter \"@office-kit/docx\" --filter \"@office-kit/docx-preview\" run build && changeset publish",
+    "release": "pnpm build:packages && changeset publish",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {

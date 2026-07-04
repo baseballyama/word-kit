@@ -1,6 +1,6 @@
 {
   "name": "@office-kit/docx-preview",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Browser preview for word-kit .docx documents.",
   "keywords": [
     "docx",

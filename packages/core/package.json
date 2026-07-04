@@ -1,6 +1,6 @@
 {
   "name": "@word-kit/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "OOXML-compliant .docx generation for browser and Node.js.",
   "keywords": [
     "docx",
@@ -36,17 +36,14 @@
     }
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@word-kit/ooxml-xml": "workspace:*",
-    "@word-kit/opc": "workspace:*",
-    "@word-kit/wml": "workspace:*"
+    "fflate": "^0.8.2"
   },
   "engines": {
     "node": ">=20"

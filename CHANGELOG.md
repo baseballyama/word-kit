@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0
+
+### Minor Changes
+
+- 3302af3: Initial public release.
+
+  `@office-kit/docx` is an OOXML-compliant (ECMA-376) `.docx` generation and
+  editing library for browsers and Node.js. It ships as a single self-contained
+  package: the OPC, XML, and WordprocessingML layers are bundled in, not
+  published separately. `@office-kit/docx-preview` renders any `Docx` value as a
+  read-only DOM tree by wrapping the OSS `docx-preview` renderer.
+
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each user-visible change is also tracked via [Changesets](https://github.com/changesets/changesets);
@@ -13,6 +25,7 @@ this file is a hand-curated overview.
   standalone functions instead of classes. The motivation is
   tree-shaking: classes carry every method along with the prototype,
   so a bundler can't drop unused operations once an instance escapes.
+
   - `Docx` is an `interface` (just `{ opc, document, partName, … }`).
   - `Docx.create(…)` → `createDocx(…)`. `Docx.open(bytes)` → `openDocx(bytes)`.
     `Docx.fromBlob(blob)` → `fromBlob(blob)`.

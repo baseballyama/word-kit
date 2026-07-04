@@ -1,6 +1,6 @@
 {
   "name": "@office-kit/docx",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "OOXML-compliant .docx generation for browser and Node.js.",
   "keywords": [
     "docx",

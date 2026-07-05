@@ -90,7 +90,7 @@
       <a href="{base}/playground" class="btn ghost">Open playground</a>
       <a href="{base}/docs/recipes" class="btn ghost">Recipes</a>
       <a href="{base}/api" class="btn ghost">API reference</a>
-      <a href="https://github.com/baseballyama/word-kit" class="btn ghost">
+      <a href="https://github.com/office-kit/docx" class="btn ghost">
         GitHub <span class="ext">↗</span>
       </a>
     </div>

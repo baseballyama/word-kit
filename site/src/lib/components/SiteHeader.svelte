@@ -8,7 +8,7 @@
     { path: '/docs/recipes', label: 'Recipes' },
     { path: '/playground', label: 'Playground' },
     { path: '/api', label: 'API' },
-    { path: 'https://github.com/baseballyama/word-kit', label: 'GitHub', external: true },
+    { path: 'https://github.com/office-kit/docx', label: 'GitHub', external: true },
   ];
 
   function resolve(link: (typeof links)[number]): string {

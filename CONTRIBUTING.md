@@ -21,8 +21,8 @@ land a change.
 
 ```sh
 # Requires Node 22+ and pnpm.
-git clone --recurse-submodules https://github.com/baseballyama/word-kit
-cd word-kit
+git clone --recurse-submodules https://github.com/office-kit/docx
+cd docx
 pnpm install
 ```
 

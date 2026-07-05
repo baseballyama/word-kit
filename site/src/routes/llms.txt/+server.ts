@@ -42,7 +42,7 @@ Pre-1.0. Core (\`openDocx\` / \`createDocx\` / \`toUint8Array\`) is stable and l
 
 ## Source
 
-- [GitHub repository](https://github.com/baseballyama/word-kit)
+- [GitHub repository](https://github.com/office-kit/docx)
 - [Sibling project: xlsx-kit](https://github.com/baseballyama/xlsx-kit)
 `;
 

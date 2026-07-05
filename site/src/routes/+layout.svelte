@@ -21,7 +21,7 @@
     <div class="footer-grid">
       <div class="cell">
         <span class="label">Project</span>
-        <a href="https://github.com/baseballyama/word-kit">word-kit</a>
+        <a href="https://github.com/office-kit/docx">word-kit</a>
       </div>
       <div class="cell">
         <span class="label">License</span>

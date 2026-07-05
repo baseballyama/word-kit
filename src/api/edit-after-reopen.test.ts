@@ -41,13 +41,17 @@ import {
   externalHyperlinks,
   footers,
   footnotesPart,
+  getTableCellText,
   headers,
   images,
   listStyles,
   openDocx,
   paragraphs,
+  paragraphText,
   removeStyle,
   setHyperlinkUrl,
+  setParagraphText,
+  setTableCellText,
   tables,
   toUint8Array,
   validate,
@@ -230,5 +234,33 @@ describe("editing a reopened document", () => {
     expect(setHyperlinkUrl(reopened, (t) => t.replace("stage.", ""))).toBe(1);
     const final = expectClean(toUint8Array(reopened));
     expect(externalHyperlinks(final)[0]?.target).toBe("https://example.com/x");
+  });
+
+  // Regression: node-level setters (setTableCellText / setParagraphText)
+  // operate on a WmlTable / WmlParagraph handed out by tables()/paragraphs(),
+  // not on the Docx, so they cannot flip doc.dirty. Before the fix, saving a
+  // *reopened* doc gated the document flush on doc.dirty and silently dropped
+  // these edits (createDocx masked the bug because add*/append* had already
+  // set dirty). toUint8Array must now re-serialize the AST unconditionally.
+  it("setTableCellText / setParagraphText after reopen persist through toUint8Array", () => {
+    const seed = createDocx();
+    addTable(seed, [
+      ["Q", "A"],
+      ["Q1", ""],
+      ["Q2", ""],
+    ]);
+    appendParagraph(seed, "para1");
+
+    // Round-trip once so the doc starts clean (dirty === false), mirroring the
+    // real "open a template → edit → save" workflow.
+    const reopened = openDocx(toUint8Array(seed));
+    setTableCellText(tables(reopened)[0]!, 1, 1, "ANS");
+    setParagraphText(paragraphs(reopened).at(-1)!, "para-edited");
+
+    const final = expectClean(toUint8Array(reopened));
+    expect(getTableCellText(tables(final)[0]!, 1, 1)).toBe("ANS");
+    expect(paragraphText(paragraphs(final).at(-1)!)).toBe("para-edited");
+    // The untouched non-empty cell must survive too.
+    expect(getTableCellText(tables(final)[0]!, 1, 0)).toBe("Q1");
   });
 });

@@ -2641,30 +2641,7 @@ export function toBlob(doc: Docx): Blob {
  * missing media parts). Returns the issues; never throws.
  */
 export function validate(doc: Docx): ValidationIssue[] {
-  if (doc.dirty) {
-    flushDocument(doc);
-    doc.dirty = false;
-  }
-  if (doc.stylesDirty && doc.stylesCache) {
-    flushStyles(doc, doc.stylesCache);
-    doc.stylesDirty = false;
-  }
-  if (doc.numberingDirty && doc.numberingCache) {
-    flushNumbering(doc, doc.numberingCache);
-    doc.numberingDirty = false;
-  }
-  if (doc.commentsDirty && doc.commentsCache) {
-    flushComments(doc, doc.commentsCache);
-    doc.commentsDirty = false;
-  }
-  if (doc.footnotesDirty && doc.footnotesCache) {
-    flushNotes(doc, doc.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
-    doc.footnotesDirty = false;
-  }
-  if (doc.endnotesDirty && doc.endnotesCache) {
-    flushNotes(doc, doc.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
-    doc.endnotesDirty = false;
-  }
+  flushPendingParts(doc);
   return validatePackage(doc.opc);
 }
 
@@ -2720,12 +2697,26 @@ export function clone(doc: Docx): Docx {
   return openDocx(toUint8Array(doc));
 }
 
-/** Serialize the package back to `.docx` bytes. */
-export function toUint8Array(doc: Docx): Uint8Array {
-  if (doc.dirty) {
-    flushDocument(doc);
-    doc.dirty = false;
-  }
+/**
+ * Flush every in-memory model back to its package part.
+ *
+ * The main document part is re-serialized from the WML AST unconditionally.
+ * After {@link openDocx} the AST — not the raw part bytes — is the source of
+ * truth, and node-level mutators such as `setTableCellText` /
+ * `setParagraphText` operate on a `WmlTable` / `WmlParagraph` handed out by
+ * {@link tables} / {@link paragraphs}. Those helpers receive only the tree
+ * node, so they cannot mark the owning {@link Docx} dirty; gating the flush on
+ * `doc.dirty` would silently drop their edits on save. The AST is round-trip
+ * stable (unrecognized elements are preserved verbatim as pass-through nodes),
+ * so re-serializing an untouched document reproduces equivalent bytes.
+ *
+ * Side parts (styles, numbering, comments, notes) are only reachable through
+ * their `*Part` accessors, which set the matching `*Dirty` flag, so those keep
+ * their dirty fast-path.
+ */
+function flushPendingParts(doc: Docx): void {
+  flushDocument(doc);
+  doc.dirty = false;
   if (doc.stylesDirty && doc.stylesCache) {
     flushStyles(doc, doc.stylesCache);
     doc.stylesDirty = false;
@@ -2746,6 +2737,11 @@ export function toUint8Array(doc: Docx): Uint8Array {
     flushNotes(doc, doc.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
     doc.endnotesDirty = false;
   }
+}
+
+/** Serialize the package back to `.docx` bytes. */
+export function toUint8Array(doc: Docx): Uint8Array {
+  flushPendingParts(doc);
   return writeOpcPackage(doc.opc);
 }
 

@@ -22,7 +22,7 @@
       applicable) and is side-effect-free at the module level, so bundlers can tree-shake
       anything you don't import. For full signatures and parameter shapes, see
       <code>src/index.ts</code> and the
-      <a href="https://github.com/baseballyama/word-kit">repository</a>.
+      <a href="https://github.com/office-kit/docx">repository</a>.
     </p>
   </div>
 </section>

@@ -87,7 +87,7 @@
     <li><a href="{base}/docs/recipes">Recipes</a> — common scenarios, copy-paste ready</li>
     <li><a href="{base}/api">API reference</a> — every public export, grouped by area</li>
     <li><a href="{base}/playground">Playground</a> — drop a .docx and see preview</li>
-    <li><a href="https://github.com/baseballyama/word-kit">GitHub</a> — source + issues</li>
+    <li><a href="https://github.com/office-kit/docx">GitHub</a> — source + issues</li>
   </ul>
 </article>
 

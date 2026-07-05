@@ -25,7 +25,7 @@ const PREAMBLE = `# word-kit — full documentation
 
 This file is the concatenation of every page on the word-kit docs site, intended for LLM ingestion in a single fetch. Page boundaries are marked with H1 headings prefixed by the source path. The companion index at \`/llms.txt\` lists the same pages with one-line descriptions.
 
-Source repo: https://github.com/baseballyama/word-kit
+Source repo: https://github.com/office-kit/docx
 `;
 
 const PROJECT_OVERVIEW = `OOXML-compliant (ECMA-376 Part 1 — WordprocessingML) Word \`.docx\` library for Node 22+ and modern browsers. Function-first API: every operation is a standalone, tree-shakeable export, never a method on a class. Lossless round-trip for every element the library does not yet model, so hand-designed templates survive intact.

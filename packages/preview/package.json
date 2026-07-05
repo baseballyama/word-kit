@@ -10,15 +10,15 @@
     "word",
     "wordprocessingml"
   ],
-  "homepage": "https://github.com/baseballyama/word-kit#readme",
+  "homepage": "https://github.com/office-kit/docx#readme",
   "bugs": {
-    "url": "https://github.com/baseballyama/word-kit/issues"
+    "url": "https://github.com/office-kit/docx/issues"
   },
   "license": "MIT",
   "author": "Yuichiro Yamashita",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/baseballyama/word-kit.git",
+    "url": "git+https://github.com/office-kit/docx.git",
     "directory": "packages/preview"
   },
   "files": [

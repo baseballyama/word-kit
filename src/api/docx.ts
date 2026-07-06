@@ -61,6 +61,9 @@ import {
   bulletAbstractNumLevels,
   decimalAbstractNumLevels,
   documentText,
+  getElementProp,
+  setElementOnOff,
+  setElementValProp,
   mergeAdjacentRuns as wmlMergeAdjacentRuns,
   EMPTY_COMMENTS_XML,
   EMPTY_NUMBERING_XML,
@@ -111,7 +114,7 @@ import {
   writeStylesPart,
   writeWmlDocument,
 } from "../internal/wordprocessingml/index.js";
-import type { XmlElement, XmlNode } from "../internal/xml/index.js";
+import type { XmlAttr, XmlDocument, XmlElement, XmlNode } from "../internal/xml/index.js";
 import { type ValidationIssue, validatePackage } from "./validator.js";
 
 const DOCUMENT_PART_FALLBACK = "/word/document.xml";
@@ -197,6 +200,10 @@ export interface Docx {
   footnotesDirty: boolean;
   endnotesCache: WmlFootnotesPart | undefined;
   endnotesDirty: boolean;
+  /** Parsed roots of parts opened by the universal raw-XML part editor. */
+  rawParts: Map<string, XmlDocument>;
+  /** Part names whose raw root was mutated and must be re-serialized on save. */
+  rawPartsDirty: Set<string>;
 }
 
 function makeDocx(opc: OpcPackage, document: WmlDocument, partName: string): Docx {
@@ -215,6 +222,8 @@ function makeDocx(opc: OpcPackage, document: WmlDocument, partName: string): Doc
     footnotesDirty: false,
     endnotesCache: undefined,
     endnotesDirty: false,
+    rawParts: new Map(),
+    rawPartsDirty: new Set(),
   };
 }
 
@@ -843,6 +852,300 @@ function ensureStylesPart(doc: Docx): WmlStylesPart {
   return doc.stylesCache;
 }
 
+const SETTINGS_PART_NAME = "/word/settings.xml";
+const EMPTY_SETTINGS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`;
+
+/** Ensure `word/settings.xml` exists (part + relationship) and return its part. */
+function ensureSettingsPart(doc: Docx): Part {
+  const existing = getPart(doc.opc, SETTINGS_PART_NAME);
+  if (existing) return existing;
+  addPart(doc.opc, {
+    name: SETTINGS_PART_NAME,
+    contentType: WML_CONTENT_TYPES.settings,
+    data: new TextEncoder().encode(EMPTY_SETTINGS_XML),
+  });
+  const docRels = partRelationships(doc.opc, doc.partName);
+  if (relationshipsByType(docRels, WML_RELATIONSHIPS.settings).length === 0) {
+    addRelationship(docRels, { type: WML_RELATIONSHIPS.settings, target: "settings.xml" });
+  }
+  return getPart(doc.opc, SETTINGS_PART_NAME) as Part;
+}
+
+/**
+ * Toggle an on-off document setting in `word/settings.xml` (e.g.
+ * `evenAndOddHeaders`, `mirrorMargins`, `trackRevisions`, `autoHyphenation`).
+ * Creates the settings part if the document has none. Pass `false` to clear.
+ */
+export function setDocumentSettingOnOff(doc: Docx, local: string, on: boolean): void {
+  const part = ensureSettingsPart(doc);
+  const xmlDoc = parseXml(new TextDecoder("utf-8").decode(part.data));
+  setElementOnOff(xmlDoc.root, local, on);
+  part.data = new TextEncoder().encode(serializeXml(xmlDoc));
+  doc.dirty = true;
+}
+
+/**
+ * Set a single-value document setting in `word/settings.xml` (e.g.
+ * `defaultTabStop`, `zoom`, `hyphenationZone`, `characterSpacingControl`).
+ * Pass `undefined` to remove it.
+ */
+export function setDocumentSettingVal(doc: Docx, local: string, val: string | undefined): void {
+  const part = ensureSettingsPart(doc);
+  const xmlDoc = parseXml(new TextDecoder("utf-8").decode(part.data));
+  setElementValProp(xmlDoc.root, local, val);
+  part.data = new TextEncoder().encode(serializeXml(xmlDoc));
+  doc.dirty = true;
+}
+
+/** Read a document setting's presence / value from `word/settings.xml`. */
+export function getDocumentSetting(doc: Docx, local: string): { present: boolean; val?: string } {
+  const part = getPart(doc.opc, SETTINGS_PART_NAME);
+  if (!part) return { present: false };
+  return getElementProp(parseXml(new TextDecoder("utf-8").decode(part.data)).root, local);
+}
+
+/**
+ * Toggle an on-off child of a `<w:style>` definition (e.g. `qFormat`, `hidden`,
+ * `semiHidden`, `locked`, `unhideWhenUsed`). No-op if the style id is unknown.
+ */
+export function setStyleOnOff(doc: Docx, styleId: string, local: string, on: boolean): void {
+  const part = stylesPart(doc);
+  const style = part ? findStyle(part, styleId) : undefined;
+  if (!style) return;
+  setElementOnOff(style, local, on);
+  doc.stylesDirty = true;
+  doc.dirty = true;
+}
+
+/**
+ * Set a single-value child of a `<w:style>` definition (e.g. `name`, `basedOn`,
+ * `next`, `link`, `uiPriority`, `aliases`). Pass `undefined` to remove it.
+ */
+export function setStyleValProp(
+  doc: Docx,
+  styleId: string,
+  local: string,
+  val: string | undefined,
+): void {
+  const part = stylesPart(doc);
+  const style = part ? findStyle(part, styleId) : undefined;
+  if (!style) return;
+  setElementValProp(style, local, val);
+  doc.stylesDirty = true;
+  doc.dirty = true;
+}
+
+/** Read a `<w:style>` child's presence / value. */
+export function getStyleProp(
+  doc: Docx,
+  styleId: string,
+  local: string,
+): { present: boolean; val?: string } {
+  const part = stylesPart(doc);
+  const style = part ? findStyle(part, styleId) : undefined;
+  return getElementProp(style, local);
+}
+
+/** Locate the `<w:lvl w:ilvl="…">` inside the abstractNum at `abstractNumIndex`. */
+function findAbstractNumLevel(
+  doc: Docx,
+  abstractNumIndex: number,
+  ilvl: number,
+): XmlElement | undefined {
+  const part = numberingPart(doc);
+  const abs = part?.abstractNums[abstractNumIndex];
+  if (!abs) return undefined;
+  return abs.children.find(
+    (c): c is XmlElement =>
+      c.kind === "element" &&
+      c.name.local === "lvl" &&
+      c.attrs.find((a) => a.name.local === "ilvl")?.value === String(ilvl),
+  );
+}
+
+/**
+ * Set a single-value child of a numbering level (`<w:lvl>`): `numFmt`, `lvlText`,
+ * `start`, `lvlRestart`, `suff`, `lvlJc`, `pStyle`. Targets the level `ilvl` of
+ * the abstract numbering definition at `abstractNumIndex` (usually 0).
+ */
+export function setNumberingLevelVal(
+  doc: Docx,
+  abstractNumIndex: number,
+  ilvl: number,
+  local: string,
+  val: string | undefined,
+): void {
+  const lvl = findAbstractNumLevel(doc, abstractNumIndex, ilvl);
+  if (!lvl) return;
+  setElementValProp(lvl, local, val);
+  doc.numberingDirty = true;
+  doc.dirty = true;
+}
+
+/** Toggle an on-off child of a numbering level (e.g. `isLgl`). */
+export function setNumberingLevelOnOff(
+  doc: Docx,
+  abstractNumIndex: number,
+  ilvl: number,
+  local: string,
+  on: boolean,
+): void {
+  const lvl = findAbstractNumLevel(doc, abstractNumIndex, ilvl);
+  if (!lvl) return;
+  setElementOnOff(lvl, local, on);
+  doc.numberingDirty = true;
+  doc.dirty = true;
+}
+
+/** Read a numbering level child's presence / value. */
+export function getNumberingLevelProp(
+  doc: Docx,
+  abstractNumIndex: number,
+  ilvl: number,
+  local: string,
+): { present: boolean; val?: string } {
+  return getElementProp(findAbstractNumLevel(doc, abstractNumIndex, ilvl), local);
+}
+
+/** Set an (unqualified) attribute by local name, replacing any existing one. */
+function setLocalAttr(el: XmlElement, local: string, value: string): void {
+  const attrs = el.attrs as XmlAttr[];
+  const existing = attrs.find((a) => a.name.local === local);
+  if (existing) {
+    (existing as { value: string }).value = value;
+  } else {
+    attrs.push({ name: { uri: "", local, prefix: "" }, value, isNamespaceDecl: false });
+  }
+}
+
+function readLocalAttr(el: XmlElement | undefined, local: string): string | undefined {
+  return el?.attrs.find((a) => a.name.local === local)?.value;
+}
+
+/** Every inline/anchored `<w:drawing>` element in the body, in document order. */
+export function imageDrawings(doc: Docx): XmlElement[] {
+  const out: XmlElement[] = [];
+  const visitParagraph = (p: WmlParagraph): void => {
+    for (const child of p.children) {
+      if (child.kind !== "run") continue;
+      for (const piece of child.pieces) {
+        if (piece.kind === "drawing") out.push(piece.node);
+      }
+    }
+  };
+  for (const block of doc.document.body.blocks) {
+    if (block.kind === "paragraph") visitParagraph(block);
+    else if (block.kind === "table") {
+      for (const row of block.rows) {
+        for (const cell of row.cells) {
+          for (const p of cell.paragraphs) visitParagraph(p);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Resize the image at `index` (in {@link imageDrawings} order) to `cxEmu` ×
+ * `cyEmu` EMU (914400 per inch). Updates both the layout extent (`wp:extent`)
+ * and the picture transform extent (`a:ext`).
+ */
+export function setImageSizeEmu(doc: Docx, index: number, cxEmu: number, cyEmu: number): void {
+  const drawing = imageDrawings(doc)[index];
+  if (!drawing) return;
+  for (const local of ["extent", "ext"]) {
+    const el = findDescendantByLocal(drawing, local);
+    if (el) {
+      setLocalAttr(el, "cx", String(Math.round(cxEmu)));
+      setLocalAttr(el, "cy", String(Math.round(cyEmu)));
+    }
+  }
+  doc.dirty = true;
+}
+
+/** Set the alt text (`wp:docPr` `descr` / `title`) of the image at `index`. */
+export function setImageAltText(
+  doc: Docx,
+  index: number,
+  alt: { descr?: string; title?: string },
+): void {
+  const drawing = imageDrawings(doc)[index];
+  const docPr = drawing ? findDescendantByLocal(drawing, "docPr") : undefined;
+  if (!docPr) return;
+  if (alt.descr !== undefined) setLocalAttr(docPr, "descr", alt.descr);
+  if (alt.title !== undefined) setLocalAttr(docPr, "title", alt.title);
+  doc.dirty = true;
+}
+
+/** Read the size (EMU) and alt text of the image at `index`. */
+export function getImageInfo(
+  doc: Docx,
+  index: number,
+):
+  | {
+      cx: string | undefined;
+      cy: string | undefined;
+      descr: string | undefined;
+      title: string | undefined;
+    }
+  | undefined {
+  const drawing = imageDrawings(doc)[index];
+  if (!drawing) return undefined;
+  const extent = findDescendantByLocal(drawing, "extent");
+  const docPr = findDescendantByLocal(drawing, "docPr");
+  return {
+    cx: readLocalAttr(extent, "cx"),
+    cy: readLocalAttr(extent, "cy"),
+    descr: readLocalAttr(docPr, "descr"),
+    title: readLocalAttr(docPr, "title"),
+  };
+}
+
+// --- Universal OPC-part raw XML editor ---------------------------------------
+//
+// The document.xml raw inspector reaches DrawingML / OMML / VML that live inline
+// in the body. Everything else — fontTable, settings, styles, numbering,
+// comments, foot/endnotes, headers/footers, webSettings, docProps — lives in its
+// own XML part. These functions expose *any* XML part's element tree so the
+// raw inspector can edit any element in the whole package, flushed on save.
+
+/** Every XML part name in the package (excluding `[Content_Types].xml`). */
+export function xmlPartNames(doc: Docx): string[] {
+  const names: string[] = [];
+  for (const [name, part] of doc.opc.parts) {
+    if (name === CONTENT_TYPES_PART_NAME) continue;
+    const ct = part.contentType ?? "";
+    if (ct.includes("xml") || name.endsWith(".xml")) names.push(name);
+  }
+  return names.toSorted();
+}
+
+/**
+ * Parse (and cache) the root element of an XML part so callers can edit it with
+ * {@link setElementAttr} / {@link setElementOnOff} / {@link setElementValProp}.
+ * Call {@link markRawPartDirty} after mutating so the change is written on save.
+ * Returns `undefined` if the part does not exist or is not XML.
+ */
+export function getRawPartRoot(doc: Docx, partName: string): XmlElement | undefined {
+  const cached = doc.rawParts.get(partName);
+  if (cached) return cached.root;
+  // Bring all pending semantic edits onto the part bytes before we parse, so the
+  // raw tree reflects the current document state.
+  flushPendingParts(doc);
+  const part = getPart(doc.opc, partName);
+  if (!part) return undefined;
+  const xmlDoc = parseXml(new TextDecoder("utf-8").decode(part.data));
+  doc.rawParts.set(partName, xmlDoc);
+  return xmlDoc.root;
+}
+
+/** Mark a raw-edited part for re-serialization on the next {@link toUint8Array}. */
+export function markRawPartDirty(doc: Docx, partName: string): void {
+  doc.rawPartsDirty.add(partName);
+}
+
 /**
  * Append a table to the body. `rows` is a row-major matrix of strings;
  * each cell becomes a single paragraph with a single run containing the
@@ -1160,6 +1463,208 @@ export function insertParagraphAt(
     doc.document.body.blocks.splice(blockInsertAt, 0, para);
   }
   return para;
+}
+
+// --- Paragraph split / merge (caret-level structural editing) ----------------
+//
+// These power Enter (split at the caret) and Backspace-at-start (merge into the
+// previous paragraph) in the editor. They operate on the semantic AST by BODY
+// BLOCK index — the same index the editor's DocPosition.block carries.
+
+function simpleRunText(run: WmlRun): string {
+  let out = "";
+  for (const piece of run.pieces) {
+    if (piece.kind === "text") out += piece.value;
+  }
+  return out;
+}
+
+function isRunSimpleText(run: WmlRun): boolean {
+  return run.pieces.every((p) => p.kind === "text");
+}
+
+function makeTextRun(rPr: XmlElement | undefined, text: string): WmlRun {
+  const preserveSpace = /^\s|\s$|\s\s/.test(text);
+  return {
+    kind: "run",
+    ...(rPr ? { rPr: structuredClone(rPr) } : {}),
+    pieces: text ? [{ kind: "text", value: text, preserveSpace }] : [],
+    extras: [],
+  };
+}
+
+function emptyParagraphChildren(): WmlInline[] {
+  return [{ kind: "run", pieces: [], extras: [] }];
+}
+
+/**
+ * Split the paragraph block at `blockIndex` into two paragraphs at run
+ * `inlineIndex` / character `offset`. The new paragraph inherits the original's
+ * `pPr`. Returns the new (second) paragraph's block index, or `-1` when the
+ * block is not a top-level paragraph.
+ */
+export function splitParagraphAt(
+  doc: Docx,
+  blockIndex: number,
+  inlineIndex: number,
+  offset: number,
+): number {
+  const list = doc.document.body.blocks;
+  const para = list[blockIndex];
+  if (!para || para.kind !== "paragraph") return -1;
+
+  const before: WmlInline[] = [];
+  const after: WmlInline[] = [];
+  let runCounter = -1;
+  for (const child of para.children) {
+    if (child.kind !== "run") {
+      (runCounter < inlineIndex ? before : after).push(child);
+      continue;
+    }
+    runCounter++;
+    if (runCounter < inlineIndex) {
+      before.push(child);
+    } else if (runCounter > inlineIndex) {
+      after.push(child);
+    } else if (isRunSimpleText(child)) {
+      const text = simpleRunText(child);
+      before.push(makeTextRun(child.rPr, text.slice(0, offset)));
+      after.push(makeTextRun(child.rPr, text.slice(offset)));
+    } else {
+      // A run carrying tabs / breaks / drawings is kept whole; the caret side
+      // is chosen by whether the offset is at its very start.
+      (offset <= 0 ? after : before).push(child);
+    }
+  }
+
+  para.children = before.length > 0 ? before : emptyParagraphChildren();
+  const newPara: WmlParagraph = {
+    kind: "paragraph",
+    ...(para.pPr ? { pPr: structuredClone(para.pPr) } : {}),
+    children: after.length > 0 ? after : emptyParagraphChildren(),
+    extras: [],
+  };
+  list.splice(blockIndex + 1, 0, newPara);
+  doc.dirty = true;
+  return blockIndex + 1;
+}
+
+/**
+ * Merge the paragraph block at `blockIndex` into the nearest preceding
+ * paragraph block, appending its inline content. Returns the caret position at
+ * the join (the end of the previous paragraph's original content), or `null`
+ * when there is no preceding paragraph to merge into.
+ */
+export function mergeParagraphIntoPrevious(
+  doc: Docx,
+  blockIndex: number,
+): { block: number; inline: number; offset: number } | null {
+  const list = doc.document.body.blocks;
+  const cur = list[blockIndex];
+  if (!cur || cur.kind !== "paragraph") return null;
+  let prevIndex = blockIndex - 1;
+  while (prevIndex >= 0 && list[prevIndex]?.kind !== "paragraph") prevIndex--;
+  const prev = list[prevIndex];
+  if (!prev || prev.kind !== "paragraph") return null;
+
+  const prevRuns = prev.children.filter((c): c is WmlRun => c.kind === "run");
+  const lastRun = prevRuns[prevRuns.length - 1];
+  const joinInline = Math.max(prevRuns.length - 1, 0);
+  const joinOffset = lastRun ? simpleRunText(lastRun).length : 0;
+
+  // Drop a leading empty run on the merged paragraph so we don't leave a stray
+  // zero-length run at the join.
+  const incoming = cur.children.filter(
+    (c, i) => !(i === 0 && c.kind === "run" && c.pieces.length === 0),
+  );
+  // Drop a trailing empty run on the previous paragraph for the same reason,
+  // but only when there is incoming content to replace it.
+  if (
+    incoming.length > 0 &&
+    prev.children.length > 0 &&
+    (() => {
+      const last = prev.children[prev.children.length - 1];
+      return last?.kind === "run" && last.pieces.length === 0;
+    })()
+  ) {
+    prev.children.pop();
+  }
+  prev.children.push(...incoming);
+  list.splice(blockIndex, 1);
+  doc.dirty = true;
+  return { block: prevIndex, inline: joinInline, offset: joinOffset };
+}
+
+/**
+ * Visible text length of a run as the editing canvas counts characters
+ * (text = its length; tab / break / hyphen = 1; drawings / fields = 0). This is
+ * the unit selection offsets are expressed in.
+ */
+export function runTextLength(run: WmlRun): number {
+  let n = 0;
+  for (const piece of run.pieces) {
+    if (piece.kind === "text") n += piece.value.length;
+    else if (
+      piece.kind === "tab" ||
+      piece.kind === "break" ||
+      piece.kind === "noBreakHyphen" ||
+      piece.kind === "softHyphen"
+    ) {
+      n += 1;
+    }
+  }
+  return n;
+}
+
+/** Split the simple-text run containing absolute char `at` so a run boundary
+ * falls exactly there. No-op when `at` is already a boundary or lands in a run
+ * that cannot be split cleanly (tabs / drawings / fields). */
+function ensureRunBoundaryAt(para: WmlParagraph, at: number): void {
+  let cursor = 0;
+  for (let i = 0; i < para.children.length; i++) {
+    const child = para.children[i];
+    if (!child || child.kind !== "run") continue;
+    const start = cursor;
+    const end = cursor + runTextLength(child);
+    cursor = end;
+    if (at <= start || at >= end) continue;
+    if (!isRunSimpleText(child)) continue;
+    const text = simpleRunText(child);
+    const rel = at - start;
+    para.children.splice(
+      i,
+      1,
+      makeTextRun(child.rPr, text.slice(0, rel)),
+      makeTextRun(child.rPr, text.slice(rel)),
+    );
+    return;
+  }
+}
+
+/**
+ * Isolate the character range `[startChar, endChar)` of a paragraph into its own
+ * run(s) — splitting runs at the boundaries — and return those runs. This is
+ * what lets character formatting (bold / color / …) apply to *exactly* the
+ * selected text instead of the whole run/line. Returns `[]` for an empty range.
+ */
+export function isolateParagraphRunRange(
+  para: WmlParagraph,
+  startChar: number,
+  endChar: number,
+): WmlRun[] {
+  if (endChar <= startChar) return [];
+  ensureRunBoundaryAt(para, endChar);
+  ensureRunBoundaryAt(para, startChar);
+  const out: WmlRun[] = [];
+  let cursor = 0;
+  for (const child of para.children) {
+    if (child.kind !== "run") continue;
+    const start = cursor;
+    const end = cursor + runTextLength(child);
+    cursor = end;
+    if (start >= startChar && end <= endChar && end > start) out.push(child);
+  }
+  return out;
 }
 
 /** Remove the paragraph at `index` from the body. Returns true on success. */
@@ -2715,28 +3220,37 @@ export function clone(doc: Docx): Docx {
  * their dirty fast-path.
  */
 function flushPendingParts(doc: Docx): void {
-  flushDocument(doc);
+  // A part opened by the raw-XML editor is authoritative for its own bytes, so
+  // skip the semantic flush for it (its raw root is serialized below instead).
+  const owned = doc.rawParts;
+  if (!owned.has(doc.partName)) flushDocument(doc);
   doc.dirty = false;
-  if (doc.stylesDirty && doc.stylesCache) {
+  if (doc.stylesDirty && doc.stylesCache && !owned.has(STYLES_PART_NAME)) {
     flushStyles(doc, doc.stylesCache);
     doc.stylesDirty = false;
   }
-  if (doc.numberingDirty && doc.numberingCache) {
+  if (doc.numberingDirty && doc.numberingCache && !owned.has(NUMBERING_PART_NAME)) {
     flushNumbering(doc, doc.numberingCache);
     doc.numberingDirty = false;
   }
-  if (doc.commentsDirty && doc.commentsCache) {
+  if (doc.commentsDirty && doc.commentsCache && !owned.has(COMMENTS_PART_NAME)) {
     flushComments(doc, doc.commentsCache);
     doc.commentsDirty = false;
   }
-  if (doc.footnotesDirty && doc.footnotesCache) {
+  if (doc.footnotesDirty && doc.footnotesCache && !owned.has(FOOTNOTES_PART_NAME)) {
     flushNotes(doc, doc.footnotesCache, FOOTNOTES_PART_NAME, "footnotes");
     doc.footnotesDirty = false;
   }
-  if (doc.endnotesDirty && doc.endnotesCache) {
+  if (doc.endnotesDirty && doc.endnotesCache && !owned.has(ENDNOTES_PART_NAME)) {
     flushNotes(doc, doc.endnotesCache, ENDNOTES_PART_NAME, "endnotes");
     doc.endnotesDirty = false;
   }
+  for (const name of doc.rawPartsDirty) {
+    const xmlDoc = owned.get(name);
+    const part = xmlDoc && getPart(doc.opc, name);
+    if (part) part.data = new TextEncoder().encode(serializeXml(xmlDoc));
+  }
+  doc.rawPartsDirty.clear();
 }
 
 /** Serialize the package back to `.docx` bytes. */

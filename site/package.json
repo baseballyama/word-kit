@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@office-kit/docx": "workspace:*",
+    "@office-kit/docx-editor": "workspace:*",
     "@office-kit/docx-preview": "workspace:*"
   },
   "devDependencies": {

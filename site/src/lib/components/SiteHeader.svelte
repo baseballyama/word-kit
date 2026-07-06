@@ -7,6 +7,7 @@
     { path: '/docs/getting-started', label: 'Docs' },
     { path: '/docs/recipes', label: 'Recipes' },
     { path: '/playground', label: 'Playground' },
+    { path: '/editor', label: 'Editor' },
     { path: '/api', label: 'API' },
     { path: 'https://github.com/office-kit/docx', label: 'GitHub', external: true },
   ];

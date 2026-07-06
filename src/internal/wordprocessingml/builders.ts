@@ -573,6 +573,183 @@ export function clearRunFormat(run: WmlRun): void {
   delete run.rPr;
 }
 
+// --- Generic run/paragraph property access ------------------------------------
+//
+// `setRunFormat` / `setParagraphAlignment` cover the common formatting. These
+// generic helpers reach *any* on-off (`<w:x/>`) or single-value (`<w:x
+// w:val="…"/>`) child of `<w:rPr>` / `<w:pPr>`, so callers (e.g. the editor's
+// property commands) can toggle the long tail of WordprocessingML formatting
+// (caps, smallCaps, vanish, keepNext, widowControl, outlineLvl, …) without a
+// bespoke function per element. Complex children (rFonts, ind, spacing, borders,
+// shading, tabs, numPr, framePr) keep their dedicated builders.
+
+function ensureRPr(run: WmlRun): XmlElement {
+  if (!run.rPr) {
+    run.rPr = {
+      kind: "element",
+      name: { uri: WML_NS, local: "rPr", prefix: "w" },
+      attrs: [],
+      children: [],
+      xmlSpace: "default",
+      selfClosing: false,
+    };
+  }
+  return run.rPr;
+}
+
+/** Remove every direct child named `local` from a properties element. */
+function removePropChild(container: XmlElement, local: string): void {
+  const children = container.children as XmlElement[];
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c && c.kind === "element" && c.name.uri === WML_NS && c.name.local === local) {
+      children.splice(i, 1);
+    }
+  }
+}
+
+/** Add or remove an on-off property element (`<w:b/>`, `<w:caps/>`, …). */
+function setOnOffChild(container: XmlElement, local: string, on: boolean): void {
+  removePropChild(container, local);
+  if (on) (container.children as XmlElement[]).push(wmlEmpty(local, []));
+}
+
+/** Set a single-value property element (`<w:x w:val="…"/>`); undefined removes it. */
+function setValChild(container: XmlElement, local: string, val: string | undefined): void {
+  removePropChild(container, local);
+  if (val !== undefined) {
+    (container.children as XmlElement[]).push(wmlEmpty(local, [wmlAttr("val", val)]));
+  }
+}
+
+/** Read whether a property element is present and its `w:val`, if any. */
+function readProp(
+  container: XmlElement | undefined,
+  local: string,
+): { present: boolean; val?: string } {
+  if (!container) return { present: false };
+  for (const c of container.children) {
+    if (c.kind === "element" && c.name.uri === WML_NS && c.name.local === local) {
+      const val = c.attrs.find((a) => a.name.uri === WML_NS && a.name.local === "val")?.value;
+      return val !== undefined ? { present: true, val } : { present: true };
+    }
+  }
+  return { present: false };
+}
+
+/** Toggle an on-off `<w:rPr>` child (creates `<w:rPr>` if absent). */
+export function setRunOnOff(run: WmlRun, local: string, on: boolean): void {
+  setOnOffChild(ensureRPr(run), local, on);
+}
+
+/** Set a single-value `<w:rPr>` child; `undefined` removes it. */
+export function setRunValProp(run: WmlRun, local: string, val: string | undefined): void {
+  setValChild(ensureRPr(run), local, val);
+}
+
+/** Read an `<w:rPr>` child's presence / value. */
+export function getRunProp(run: WmlRun, local: string): { present: boolean; val?: string } {
+  return readProp(run.rPr, local);
+}
+
+/** Toggle an on-off `<w:pPr>` child (creates `<w:pPr>` if absent). */
+export function setParagraphOnOff(p: WmlParagraph, local: string, on: boolean): void {
+  setOnOffChild(ensurePPr(p), local, on);
+}
+
+/** Set a single-value `<w:pPr>` child; `undefined` removes it. */
+export function setParagraphValProp(p: WmlParagraph, local: string, val: string | undefined): void {
+  setValChild(ensurePPr(p), local, val);
+}
+
+/** Read a `<w:pPr>` child's presence / value. */
+export function getParagraphProp(
+  p: WmlParagraph,
+  local: string,
+): { present: boolean; val?: string } {
+  return readProp(p.pPr, local);
+}
+
+// --- Container-level generic property access ----------------------------------
+//
+// The same on-off / single-value machinery, but operating on an arbitrary
+// properties element (`<w:tcPr>`, `<w:trPr>`, `<w:tblPr>`, `<w:sectPr>`, `<w:lvl>`
+// …) passed in by the caller. The editor uses these for the long tail of table,
+// row, cell, and section formatting, ensuring the container exists first.
+
+/** Toggle an on-off child on any properties element. */
+export function setElementOnOff(container: XmlElement, local: string, on: boolean): void {
+  setOnOffChild(container, local, on);
+}
+
+/** Set a single-value child on any properties element; `undefined` removes it. */
+export function setElementValProp(
+  container: XmlElement,
+  local: string,
+  val: string | undefined,
+): void {
+  setValChild(container, local, val);
+}
+
+/** Read a child's presence / value from any properties element. */
+export function getElementProp(
+  container: XmlElement | undefined,
+  local: string,
+): { present: boolean; val?: string } {
+  return readProp(container, local);
+}
+
+/** Build an empty properties element (`<w:tcPr/>`, `<w:sectPr/>`, …). */
+export function makePropsElement(local: string): XmlElement {
+  return {
+    kind: "element",
+    name: { uri: WML_NS, local, prefix: "w" },
+    attrs: [],
+    children: [],
+    xmlSpace: "default",
+    selfClosing: false,
+  };
+}
+
+// --- Raw XML node editing -----------------------------------------------------
+//
+// The universal escape hatch: set/read any attribute or child on any element in
+// the AST. The editor's raw-XML inspector uses these to make every element —
+// including DrawingML / OMML / VML that live inline in document.xml — editable,
+// without a bespoke command per OOXML element.
+
+/** Set (or, with `undefined`, remove) an attribute by local name on any element. */
+export function setElementAttr(el: XmlElement, local: string, value: string | undefined): void {
+  const attrs = el.attrs as XmlAttr[];
+  const index = attrs.findIndex((a) => a.name.local === local);
+  if (value === undefined) {
+    if (index >= 0) attrs.splice(index, 1);
+    return;
+  }
+  if (index >= 0) {
+    (attrs[index] as { value: string }).value = value;
+  } else {
+    attrs.push({ name: { uri: "", local, prefix: "" }, value, isNamespaceDecl: false });
+  }
+}
+
+/** Read an attribute value by local name from any element. */
+export function getElementAttr(el: XmlElement, local: string): string | undefined {
+  return el.attrs.find((a) => a.name.local === local)?.value;
+}
+
+/** The direct child elements of an element (text/comment nodes filtered out). */
+export function childElementsOf(el: XmlElement): XmlElement[] {
+  return el.children.filter((c): c is XmlElement => c.kind === "element");
+}
+
+/** Append a child element (`<w:local/>` in the WML namespace) and return it. */
+export function appendChildElement(parent: XmlElement, local: string): XmlElement {
+  const child = makePropsElement(local);
+  (parent.children as XmlElement[]).push(child);
+  return child;
+}
+
 /**
  * Read back the formatting a run currently has on its `<w:rPr>`. Returns a
  * `RunFormatting` with only the keys that are actually present, so callers

@@ -43,6 +43,12 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)(happy-dom@20.9.0)(jsdom@29.1.1)(lightningcss@1.32.0)
 
+  packages/editor:
+    dependencies:
+      '@office-kit/docx':
+        specifier: workspace:*
+        version: link:../..
+
   packages/preview:
     dependencies:
       '@office-kit/docx':
@@ -60,6 +66,9 @@ importers:
       '@office-kit/docx':
         specifier: workspace:*
         version: link:..
+      '@office-kit/docx-editor':
+        specifier: workspace:*
+        version: link:../packages/editor
       '@office-kit/docx-preview':
         specifier: workspace:*
         version: link:../packages/preview
